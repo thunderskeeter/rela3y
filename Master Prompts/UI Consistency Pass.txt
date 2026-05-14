@@ -1,0 +1,14 @@
+“UI Consistency Pass” Prompt (instantly makes it feel premium)
+
+Use after building a tab:
+
+Polish pass:
+Do not change logic.
+Only improve UI consistency:
+- spacing rhythm
+- typography hierarchy
+- button hierarchy
+- focus/hover states
+- select/input dark theme styling
+- empty states and error states
+List exact CSS changes and where they apply.

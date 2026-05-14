@@ -1,0 +1,124 @@
+ZERO-TRUST TENANT AUDIT PROMPT (ArcRelay / Relay Dashboard)
+
+Role: Act as a senior application security engineer performing a ZERO-TRUST multi-tenant audit.
+Goal: Prove whether Tenant A can ever access/modify Tenant B data, even with malicious inputs.
+
+ABSOLUTE RULES:
+- Scan + report ONLY in Phase 0. DO NOT modify code in Phase 0.
+- Assume every client is hostile.
+- Treat all tenant selectors (?to, ?accountId, headers, webhook body) as attacker-controlled inputs.
+- Focus on horizontal privilege escalation (cross-tenant leakage) above all else.
+
+CONTEXT (must use):
+- App is multi-tenant with accountId + legacy `to` mapping.
+- Middleware chain is intended to be: requireAuth -> requireTenant -> requireAccountAccess (and special webhook tenant resolver).
+- Data is persisted in JSON store.
+- Endpoints use ?to in many places; compatibility must remain.
+- Tenants must never see or mutate other tenant data; on by-id access errors return 404 (not 403).
+
+PHASE 0 — FULL REPO AUDIT (NO CODE CHANGES)
+1) Enumerate all API surfaces:
+   - List every backend route: method + path + file + handler function.
+   - For each, record:
+     a) Does it require auth?
+     b) Does it resolve tenant?
+     c) Does it enforce account access?
+     d) What selector(s) it accepts (query, headers, body)?
+
+2) Identify all persisted collections/structures:
+   - accounts, contacts, conversations, messages, flows, rules, scheduled jobs, integrations, billing, notifications, logs.
+   - Where each is read/written (file + function).
+   - Note keying strategy (global key, to-bucket, accountId namespace, etc).
+
+3) Zero-trust attack analysis (simulate hostile tenant inputs):
+   For each route and service call path, attempt to reason about these attack classes:
+
+   A) Tenant selector spoofing
+   - Can attacker pass ?accountId for someone else?
+   - Can attacker pass ?to for someone else?
+   - Can attacker override tenant via headers x-account-id/x-tenant-to?
+   - Can attacker exploit precedence order to force wrong tenant?
+   - Are tenant selectors accepted anywhere without requireAuth?
+
+   B) IDOR (Insecure Direct Object Reference) / by-id bypass
+   - Any GET/PUT/PATCH/DELETE referencing :id, contactId, conversationId, flowId, ruleId:
+     - verify entity is loaded by {id AND accountId}, not just {id}.
+     - verify responses never return objects from other accountId.
+     - verify mutations cannot target other accountId.
+     - verify not-found returns 404 (not leaking existence).
+
+   C) Global scan leakage
+   - Any “list all” behavior across tenants:
+     - global iteration over all contacts/convos/messages/flows/rules
+     - scheduler scans across all tenants but then returns/mutates without tenant guard
+     - background retention jobs touching global store
+   - Confirm all list endpoints filter by req.tenant.accountId.
+
+   D) Namespace collisions / overwrite bugs
+   - flows: same flow id across tenants overwriting
+   - rules: to-bucket collisions
+   - contacts: ${to}__${phone} collisions with mismatched accountId
+   - conversations: to__from collisions, reassignment risks
+   - integrations/billing: stored under accounts[to] or global keys
+   - identify any key that is not tenant-namespaced and could overwrite another tenant.
+
+   E) Webhook impersonation
+   - Webhooks that accept body.To/body.to:
+     - is there signature validation (Twilio or equivalent)?
+     - is DEV simulator bypass gated by secret + DEV_MODE?
+     - can attacker send requests to /webhooks/* to create/modify records for another tenant?
+     - confirm webhooks cannot use querystring tenant selection.
+     - confirm inbound webhook “To” must map to a real account or fail (prod).
+
+   F) Role / control-plane bleed
+   - /api/dev/* or any admin endpoints:
+     - ensure superadmin-only gates server-side.
+     - ensure tenant users cannot change global runtime settings.
+   - check for hidden “debug” endpoints returning global store.
+
+   G) Client-side trust bugs
+   - frontend: does it assume tenant isolation solely from UI state?
+   - any frontend endpoints missing tenant query injection
+   - any ability to call admin endpoints from tenant UI without backend role checks.
+
+   H) Data migration / backfill risks
+   - migration assigning orphaned records to a default account
+   - potential misassignment of old records to the wrong tenant
+   - verify orphaned records are excluded from tenant reads in prod.
+
+4) Produce a structured report with severity:
+   - CRITICAL: cross-tenant read/write possible
+   - HIGH: overwrite/collision possible, webhook spoofing possible, missing auth on tenant routes
+   - MEDIUM: insecure defaults, excessive info in errors, weak rate limiting
+   - LOW: hygiene items
+
+REPORT FORMAT (must follow exactly):
+A) Executive verdict:
+   - “Is cross-tenant data access possible?” YES/NO/UNCERTAIN with justification.
+
+B) Route-by-route table (not code, just list):
+   - METHOD PATH | Auth? | Tenant? | Access check? | Selector(s) | Risk notes
+
+C) Top 10 findings (ranked):
+   - Finding
+   - Impact
+   - Exact file paths + function names
+   - Repro steps (how a tenant would exploit)
+   - Minimal fix recommendation
+
+D) Confirmed safe areas:
+   - list key routes/paths proven tenant-safe.
+
+STOP after Phase 0 report. Do NOT edit code yet.
+
+PHASE 1 — OPTIONAL HARDENING (ONLY AFTER APPROVAL)
+If and only if I approve, implement minimal diffs to fix CRITICAL/HIGH issues with these constraints:
+- Keep endpoints stable; preserve backwards compatibility.
+- Add/extend tenant-scoped datastore helpers; never query unfiltered global stores.
+- Add signature validation to webhooks; dev bypass must require secret and DEV_MODE.
+- All by-id fetches must include accountId.
+- Add rate limiting to login + webhooks (simple in-memory ok).
+- Add SECURITY_TEST_PLAN.md with curl/PS scripts to validate isolation across two tenants.
+- Run node --check and provide manual test steps.
+
+Begin now with PHASE 0 ONLY: scan repo and report.

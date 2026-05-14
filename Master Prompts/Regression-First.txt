@@ -1,0 +1,6 @@
+“Regression-First” Prompt (stops breaking existing stuff)
+
+Use when adding UI/features to Settings:
+
+Before coding, list 10 existing behaviors that must not break (routes, tabs, webhooks, send flow, tenant isolation).
+After coding, provide a manual regression checklist and confirm each item still works.

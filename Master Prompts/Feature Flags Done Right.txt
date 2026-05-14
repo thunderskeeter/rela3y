@@ -1,0 +1,9 @@
+“Feature Flags Done Right” Prompt (makes SaaS feel pro)
+
+Use for “Coming Soon” toggles + demo/live behavior:
+
+Add feature flags for this area:
+- Demo mode behavior must be obvious and safe.
+- Live mode stubs should exist but not execute without config.
+Store flags per tenant and also allow a global dev override.
+Do not disable tenant isolation.

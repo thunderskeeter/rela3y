@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Book Appointment</title>
+  <style>
+    :root {
+      --bg:#0a101d;
+      --text:#edf3ff;
+      --muted:#a5b4d3;
+      --border:rgba(255,255,255,.17);
+      --card-grad:linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.04));
+      --input-bg:rgba(255,255,255,.08);
+      --brand1:#7dc3ff;
+      --brand2:#b4dbff;
+      --danger:#ef4444;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Arial,sans-serif;
+      background-color:#0b1220;
+      background-image:
+        linear-gradient(180deg, rgba(7,12,22,0.34), rgba(7,12,22,0.34)),
+        linear-gradient(120deg,
+          rgba(98, 104, 114, 0.82) 0%,
+          rgba(118, 150, 124, 0.72) 50%,
+          rgba(123, 186, 132, 0.82) 100%);
+      background-size: 260% 260%;
+      animation: relayBgShift 14s ease-in-out infinite;
+      color:var(--text);
+      letter-spacing:.01em;
+    }
+    .wrap{max-width:920px;margin:0 auto;padding:22px}
+    .card{
+      background:var(--card-grad);
+      border:1px solid var(--border);
+      border-radius:18px;
+      padding:16px;
+      box-shadow:0 24px 48px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.16);
+      backdrop-filter:blur(18px);
+      -webkit-backdrop-filter:blur(18px);
+    }
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .col{display:grid;gap:10px}
+    .input,.select,button{
+      border-radius:12px;
+      border:1px solid var(--border);
+      padding:11px 13px;
+      background:var(--input-bg);
+      color:var(--text);
+      outline:none;
+      transition:border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+    }
+    .input:focus,.select:focus{
+      border-color:rgba(173,212,255,.62);
+      box-shadow:0 0 0 3px rgba(128,176,255,.22);
+    }
+    .select{appearance:none;background:var(--input-bg);color:var(--text)}
+    .select option{background:#0f1a2e;color:var(--text)}
+    .input::placeholder{color:var(--muted)}
+    button{cursor:pointer}
+    button:hover{transform:translateY(-1px)}
+    button.primary{
+      background:linear-gradient(180deg, var(--brand2), var(--brand1));
+      color:#071226;
+      font-weight:700;
+      border-color:rgba(198,225,255,.85);
+      box-shadow:0 16px 28px rgba(76,130,204,.35), inset 0 1px 0 rgba(255,255,255,.6);
+    }
+    .muted{color:var(--muted);font-size:13px}
+    .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+    .slot.active{border-color:#9ac8ff;background:rgba(146,194,255,.22);box-shadow:0 0 0 2px rgba(146,194,255,.18)}
+    .days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+    .day-dow{font-size:11px;color:var(--muted);text-align:center;padding:2px 0}
+    .day-empty{visibility:hidden;border:1px solid transparent}
+    .day-pill{display:grid;gap:2px;text-align:left}
+    .day-pill small{font-size:11px;color:var(--muted)}
+    .day-pill.unavailable{border-color:rgba(148,163,184,.45);background:rgba(148,163,184,.16);color:#cbd5e1;cursor:not-allowed;opacity:.82}
+    .day-pill.unavailable small{color:#94a3b8}
+    .day-pill.active{border-color:#9ac8ff;background:rgba(146,194,255,.22)}
+    #bookingSummary{
+      border-radius:14px;
+      border:1px solid rgba(173,212,255,.32);
+      background:linear-gradient(180deg, rgba(130,178,255,.18), rgba(130,178,255,.08));
+      color:#e8f2ff;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.2);
+      font-weight:500;
+    }
+    .hidden{display:none}
+    @keyframes relayBgShift{
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @media (prefers-reduced-motion: reduce){
+      body{animation:none}
+    }
+    @media (max-width: 640px){
+      .wrap{padding:14px}
+      .card{border-radius:16px;padding:14px}
+    }
+  </style>
+  <script src="/js/book.js" defer></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card col">
+      <h1 id="bizName" style="margin:0;font-size:26px;">Book Appointment</h1>
+      <div id="subLine" class="muted">Choose a service and time.</div>
+    </div>
+    <div style="height:12px"></div>
+    <div class="card col">
+      <div class="row">
+        <input id="date" class="input" type="date" style="max-width:220px;" />
+      </div>
+      <div id="days" class="days"></div>
+      <div id="slots" class="slots"></div>
+      <div id="slotMsg" class="muted"></div>
+    </div>
+    <div style="height:12px"></div>
+    <div class="card col">
+      <div>
+        <div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;">Summary</div>
+        <div id="bookingSummary" class="input" style="min-height:54px;display:flex;align-items:center;"></div>
+      </div>
+      <input id="name" class="input" placeholder="Full name" />
+      <input id="phone" class="input" placeholder="Phone" />
+      <input id="email" type="email" class="input" placeholder="Email (required for invoice delivery)" required />
+      <div class="row">
+        <button id="bookBtn" class="primary">Book Appointment</button>
+        <button id="rescheduleBtn" class="hidden">Reschedule</button>
+        <button id="cancelBtn" class="hidden">Cancel Booking</button>
+        <div id="status" class="muted"></div>
+      </div>
+      <div id="manageMsg" class="muted hidden"></div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,364 @@
+﻿<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arc Relay | AI Revenue Control for Inbound Teams</title>
+  <meta name="description" content="Arc Relay turns missed calls, web leads, and inbox chaos into a controlled revenue workflow for service businesses." />
+  <link rel="icon" type="image/x-icon" href="/logos/favicon.ico" />
+  <script src="/js/landing.js?v=20260311-perf1" defer></script>
+  <style>
+    :root {
+      --bg: #060b14;
+      --panel: rgba(8, 15, 28, 0.78);
+      --panel-strong: rgba(12, 22, 39, 0.96);
+      --line: rgba(255, 255, 255, 0.1);
+      --line-strong: rgba(255, 255, 255, 0.18);
+      --text: #f5f8ff;
+      --muted: #95a7c7;
+      --brand: #a8ffb9;
+      --shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+      --shadow-soft: 0 18px 48px rgba(0, 0, 0, 0.28);
+      --font-display: "Sora", "Segoe UI", sans-serif;
+      --font-body: "Manrope", "Segoe UI", sans-serif;
+      --page: min(1240px, calc(100% - 32px));
+    }
+    [data-theme="light"] {
+      --bg: #eef3fb;
+      --panel: rgba(255, 255, 255, 0.82);
+      --panel-strong: rgba(255, 255, 255, 0.98);
+      --line: rgba(16, 28, 52, 0.1);
+      --line-strong: rgba(16, 28, 52, 0.16);
+      --text: #0f1a30;
+      --muted: #566987;
+      --shadow: 0 30px 80px rgba(18, 36, 64, 0.14);
+      --shadow-soft: 0 18px 48px rgba(18, 36, 64, 0.11);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--font-body);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(97, 214, 143, 0.2), transparent 28%),
+        radial-gradient(circle at top right, rgba(117, 167, 255, 0.18), transparent 24%),
+        linear-gradient(180deg, #06101b 0%, var(--bg) 42%, #040810 100%);
+      overflow-x: hidden;
+    }
+    [data-theme="light"] body {
+      background:
+        radial-gradient(circle at top left, rgba(97, 214, 143, 0.14), transparent 28%),
+        radial-gradient(circle at top right, rgba(117, 167, 255, 0.16), transparent 24%),
+        linear-gradient(180deg, #f8fbff 0%, var(--bg) 52%, #edf3fb 100%);
+    }
+    a { color: inherit; }
+    img { max-width: 100%; display: block; }
+    .page { width: var(--page); margin: 0 auto; padding-bottom: 96px; position: relative; z-index: 1; }
+    .grid-noise {
+      position: fixed; inset: 0; pointer-events: none; opacity: 0.25;
+      background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.55), transparent 90%);
+    }
+    .announcement {
+      width: fit-content; margin: 22px auto 14px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05); color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+      display: flex; align-items: center; gap: 10px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    }
+    .announcement strong { color: var(--brand); font-weight: 800; }
+    .nav {
+      position: sticky; top: 14px; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      margin: 0 auto; padding: 12px 14px; border: 1px solid var(--line); border-radius: 999px; background: rgba(8, 15, 28, 0.62);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: var(--shadow-soft);
+    }
+    [data-theme="light"] .nav { background: rgba(255, 255, 255, 0.76); }
+    .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; }
+    .brand img { width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 10px 20px rgba(97, 214, 143, 0.22); }
+    .brand span { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.04em; font-size: 18px; white-space: nowrap; }
+    .nav-links { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .nav-links a, .btn {
+      border: 1px solid var(--line); border-radius: 999px; padding: 11px 16px; font: inherit; font-size: 14px; font-weight: 700;
+      text-decoration: none; color: var(--text); background: rgba(255, 255, 255, 0.04); cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    }
+    .nav-links a:hover, .btn:hover { transform: translateY(-1px); border-color: var(--line-strong); background: rgba(255, 255, 255, 0.08); box-shadow: var(--shadow-soft); }
+    .btn-primary { color: #07110f; border-color: rgba(168, 255, 185, 0.65); background: linear-gradient(180deg, #baffc7 0%, #74de95 100%); box-shadow: 0 18px 40px rgba(97, 214, 143, 0.24); }
+    .btn-primary:hover { background: linear-gradient(180deg, #ccffd5 0%, #87e7a3 100%); }
+    .hero { padding: 74px 0 34px; text-align: center; position: relative; }
+    .hero::before, .hero::after { content: ""; position: absolute; border-radius: 999px; filter: blur(80px); opacity: 0.55; z-index: -1; }
+    .hero::before { width: 340px; height: 340px; background: rgba(97, 214, 143, 0.18); left: -80px; top: 20px; }
+    .hero::after { width: 320px; height: 320px; background: rgba(117, 167, 255, 0.18); right: -80px; top: 40px; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 10px; margin-bottom: 20px; padding: 8px 14px; border-radius: 999px;
+      border: 1px solid rgba(168, 255, 185, 0.25); background: rgba(168, 255, 185, 0.08); color: var(--brand);
+      font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 6px rgba(168, 255, 185, 0.12); }
+    h1 { margin: 0 auto; max-width: 12ch; font-family: var(--font-display); font-size: clamp(52px, 8vw, 108px); line-height: 0.96; letter-spacing: -0.07em; text-wrap: balance; }
+    .hero-copy { width: min(820px, 100%); margin: 24px auto 0; color: var(--muted); font-size: clamp(18px, 2.1vw, 22px); line-height: 1.65; text-wrap: balance; }
+    .hero-actions { margin-top: 28px; display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+    .hero-proof { margin-top: 18px; display: flex; justify-content: center; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+    .hero-proof span { display: inline-flex; align-items: center; gap: 8px; }
+    .hero-proof span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); }
+    .hero-screen { margin-top: 44px; position: relative; padding: 18px; border-radius: 36px; border: 1px solid var(--line-strong); background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)); box-shadow: var(--shadow); }
+    .hero-screen::before {
+      content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none;
+      background: linear-gradient(135deg, rgba(168,255,185,0.46), rgba(117,167,255,0.18), transparent 70%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+    }
+    .screen-shell { border-radius: 26px; border: 1px solid rgba(255,255,255,0.08); background: linear-gradient(180deg, rgba(7, 13, 24, 0.94), rgba(10, 19, 33, 0.88)); overflow: hidden; }
+    .screen-topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.06); color: var(--muted); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+    .screen-dots { display: flex; gap: 7px; }
+    .screen-dots span { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.4); }
+    .screen-grid { display: grid; grid-template-columns: 1.35fr 0.65fr; }
+    .screen-grid img { width: 100%; height: 100%; object-fit: cover; }
+    .screen-side { border-left: 1px solid rgba(255,255,255,0.06); padding: 20px; display: grid; align-content: start; gap: 14px; background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)); }
+    .mini-card, .metric, .card, .pricing-card, .quote, .cta { border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow-soft); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+    .mini-card { padding: 16px; border-radius: 18px; text-align: left; }
+    .mini-card strong { display: block; font-family: var(--font-display); font-size: 28px; letter-spacing: -0.05em; margin-bottom: 6px; color: var(--brand); }
+    .mini-card span { color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .section { padding-top: 34px; }
+    .section-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 22px; flex-wrap: wrap; }
+    .section-head h2 { margin: 0; max-width: 12ch; font-family: var(--font-display); font-size: clamp(32px, 4vw, 54px); line-height: 1.02; letter-spacing: -0.06em; }
+    .section-head p { margin: 0; max-width: 640px; color: var(--muted); font-size: 17px; line-height: 1.65; }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+    .metric { border-radius: 24px; padding: 22px; }
+    .metric strong { display: block; font-family: var(--font-display); font-size: clamp(32px, 3vw, 40px); letter-spacing: -0.06em; }
+    .metric span { display: block; margin-top: 8px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+    .cards.two { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 18px; }
+    .cards.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .cards.four { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+    .card { border-radius: 28px; padding: 28px; min-height: 100%; }
+    .card h3 { margin: 0; font-family: var(--font-display); font-size: 24px; letter-spacing: -0.04em; }
+    .card p, .card li { color: var(--muted); font-size: 15px; line-height: 1.7; }
+    .card ul { margin: 18px 0 0; padding-left: 18px; }
+    .flow-stack { display: grid; gap: 14px; margin-top: 22px; }
+    .flow-row { display: grid; grid-template-columns: 72px 1fr; gap: 16px; padding: 16px; border-radius: 18px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); }
+    .flow-row strong { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; font-family: var(--font-display); font-size: 18px; color: #07110f; background: linear-gradient(180deg, #baffc7 0%, #74de95 100%); box-shadow: 0 12px 28px rgba(97,214,143,0.2); }
+    .flow-row h4 { margin: 2px 0 6px; font-size: 20px; letter-spacing: -0.03em; }
+    .flow-row p { margin: 0; }
+    .dashboard-shot { border-radius: 22px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); margin-top: 22px; }
+    .dashboard-shot img { aspect-ratio: 16 / 10; object-fit: cover; }
+    .signal-list { display: grid; gap: 12px; margin-top: 20px; }
+    .signal-item { display: flex; align-items: start; gap: 14px; padding: 16px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03); }
+    .signal-item strong { min-width: 112px; color: var(--brand); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .quote { margin-top: 18px; border-radius: 28px; padding: 28px; }
+    .quote p { margin: 0; font-family: var(--font-display); font-size: clamp(24px, 3.5vw, 38px); line-height: 1.18; letter-spacing: -0.05em; }
+    .quote span { display: block; margin-top: 16px; color: var(--muted); font-size: 14px; }
+    .pricing-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
+    .pricing-card { border-radius: 28px; padding: 28px; }
+    .pricing-card.featured { border-color: rgba(168, 255, 185, 0.45); box-shadow: 0 22px 54px rgba(97, 214, 143, 0.14); }
+    .plan-name { margin: 0; font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand); }
+    .plan-price { margin: 14px 0 6px; font-family: var(--font-display); font-size: 52px; line-height: 0.95; letter-spacing: -0.07em; }
+    .plan-note { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.65; min-height: 50px; }
+    .plan-list { margin: 18px 0 24px; padding-left: 18px; color: var(--muted); line-height: 1.7; font-size: 15px; }
+    .cta {
+      margin-top: 34px; border-radius: 32px; padding: 30px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+      background: radial-gradient(circle at left center, rgba(168,255,185,0.18), transparent 28%), linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+    }
+    .cta h2 { margin: 0; font-family: var(--font-display); font-size: clamp(28px, 4vw, 44px); line-height: 1.02; letter-spacing: -0.05em; max-width: 12ch; }
+    .cta p { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
+    .footer { margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+    .footer-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .footer-links a { text-decoration: none; }
+    .footer-links a:hover { color: var(--text); }
+    .pricing-overlay { position: fixed; inset: 0; padding: 18px; display: grid; place-items: center; background: rgba(4, 8, 16, 0.72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 80; }
+    .pricing-overlay.hidden { display: none; }
+    .pricing-modal { width: min(1160px, 100%); border: 1px solid var(--line-strong); border-radius: 30px; background: var(--panel-strong); box-shadow: var(--shadow); padding: 20px; }
+    .pricing-head { display: flex; align-items: start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+    .pricing-head h3 { margin: 0; font-family: var(--font-display); font-size: 30px; letter-spacing: -0.05em; }
+    .fine { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .lead-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+    .lead-grid label, .lead-grid .fine-box { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,0.03); }
+    .lead-grid span { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+    input { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,0.04); color: var(--text); font: inherit; }
+    input::placeholder { color: rgba(149, 167, 199, 0.8); }
+    .theme-toggle {
+      position: fixed; left: 18px; bottom: 18px; width: 48px; height: 48px; border-radius: 999px; border: 1px solid var(--line); background: rgba(8, 15, 28, 0.72);
+      color: var(--text); box-shadow: var(--shadow-soft); display: grid; place-items: center; cursor: pointer; z-index: 90; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    }
+    .theme-toggle .icon { position: absolute; width: 20px; height: 20px; opacity: 0; transform: scale(0.8); transition: opacity 160ms ease, transform 160ms ease; }
+    [data-theme="dark"] .theme-toggle .icon-moon, [data-theme="light"] .theme-toggle .icon-sun { opacity: 1; transform: scale(1); }
+    .reveal { opacity: 0; transform: translateY(22px); transition: opacity 480ms ease, transform 480ms ease; }
+    .reveal.in { opacity: 1; transform: translateY(0); }
+    @media (max-width: 1100px) {
+      .screen-grid, .cards.two, .pricing-grid, .lead-grid, .metrics, .cards.four, .cards.three { grid-template-columns: 1fr; }
+      .hero-screen, .card, .pricing-card, .cta, .pricing-modal { border-radius: 24px; }
+    }
+    @media (max-width: 760px) {
+      .page { width: min(100% - 20px, 1240px); }
+      .announcement { margin-top: 14px; }
+      .nav { border-radius: 28px; padding: 12px; }
+      h1 { max-width: 10ch; }
+      .hero { padding-top: 48px; }
+      .hero-screen { padding: 12px; }
+      .section-head { margin-bottom: 16px; }
+      .section-head h2 { max-width: 100%; }
+      .metric, .card, .pricing-card, .quote, .cta { padding: 22px; }
+      .theme-toggle { left: auto; right: 18px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      * { scroll-behavior: auto; }
+      .reveal, .reveal.in, .theme-toggle .icon, .nav-links a, .btn { transition: none; }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="grid-noise" aria-hidden="true"></div>
+  <main class="page">
+    <div class="announcement reveal" data-reveal>
+      <strong>Arc Relay live</strong>
+      <span>AI revenue control for missed calls, inbound leads, and follow-up execution</span>
+    </div>
+    <header class="nav reveal" data-reveal>
+      <a class="brand" href="/home" aria-label="Arc Relay home">
+        <img src="/logos/2.png" alt="Arc Relay mark" />
+        <span>Arc Relay</span>
+      </a>
+            <nav class="nav-links" aria-label="Primary">
+        <a href="/demo">Demo</a>
+        <a href="/dashboard">Login</a>
+      </nav>
+    </header>
+    <section class="hero">
+      <div class="eyebrow reveal" data-reveal>Revenue recovery OS for service operators</div>
+      <h1 class="reveal" data-reveal>Run inbound demand like a controlled trading desk.</h1>
+      <p class="hero-copy reveal" data-reveal>Arc Relay gives service businesses one operating layer for missed calls, web forms, SMS follow-up, booking handoff, and revenue accountability. Instead of scattered inboxes and slow callbacks, your team gets deterministic next actions and live pipeline control.</p>
+      <div class="hero-actions reveal" data-reveal>
+        <a class="btn btn-primary" href="#pricing-modal" data-open-pricing="1">Launch Arc Relay</a>
+        <a class="btn" href="#platform">See the command surface</a>
+      </div>
+      <div class="hero-proof reveal" data-reveal>
+        <span>Tenant-aware workspaces</span>
+        <span>Deterministic follow-up rules</span>
+        <span>Audit-ready action history</span>
+      </div>
+      <div class="hero-screen reveal" data-reveal>
+        <div class="screen-shell">
+          <div class="screen-topbar">
+            <div class="screen-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div>Arc Relay command center</div>
+            <div>Live operator view</div>
+          </div>
+          <div class="screen-grid">
+            <img src="/logos/product-screen-1.png" alt="Arc Relay dashboard" loading="eager" />
+            <div class="screen-side">
+              <div class="mini-card"><strong>&lt; 15 min</strong><span>Target response window from first signal to first outbound action.</span></div>
+              <div class="mini-card"><strong>24/7</strong><span>Always-on intake for calls, forms, text replies, and reactivation triggers.</span></div>
+              <div class="mini-card"><strong>1 queue</strong><span>Operators see every active opportunity, next step, and owner in one view.</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="section" id="proof">
+      <div class="section-head reveal" data-reveal>
+        <h2>Built for teams that lose money in the first ten minutes.</h2>
+        <p>Arc Relay is for operators with real inbound volume: home services, clinics, med spas, detailers, and appointment-driven teams where response speed and consistency directly affect booked revenue.</p>
+      </div>
+      <div class="metrics">
+        <article class="metric reveal" data-reveal><strong>Missed calls</strong><span>Trigger instant fallback outreach instead of waiting for manual callbacks.</span></article>
+        <article class="metric reveal" data-reveal><strong>Web leads</strong><span>Move every form submission into a real queue with next-step automation.</span></article>
+        <article class="metric reveal" data-reveal><strong>Team handoff</strong><span>Preserve context before a rep takes over and closes the opportunity.</span></article>
+        <article class="metric reveal" data-reveal><strong>Revenue view</strong><span>See what converted, what stalled, and where money is leaking.</span></article>
+      </div>
+    </section>
+    <section class="section" id="workflow">
+      <div class="cards two">
+        <article class="card reveal" data-reveal>
+          <div class="section-head" style="margin:0 0 8px 0;">
+            <h2 style="font-size:clamp(28px,3vw,42px);max-width:11ch;">Arc Relay workflow</h2>
+            <p style="max-width:430px;">A deterministic chain: capture, classify, execute, verify.</p>
+          </div>
+          <div class="flow-stack">
+            <div class="flow-row"><strong>01</strong><div><h4>Capture demand</h4><p>Missed calls, forms, chat leads, direct texts, and manual opportunities land in one operating queue.</p></div></div>
+            <div class="flow-row"><strong>02</strong><div><h4>Decide next action</h4><p>Rules apply tenant-safe policies for timing, routing, retries, and handoff ownership.</p></div></div>
+            <div class="flow-row"><strong>03</strong><div><h4>Execute follow-up</h4><p>Arc Relay sends the right message, books the next step, or escalates to the right human.</p></div></div>
+            <div class="flow-row"><strong>04</strong><div><h4>Verify revenue outcome</h4><p>Booked appointments, recoveries, and lost opportunities remain visible for operator review.</p></div></div>
+          </div>
+        </article>
+        <article class="card reveal" data-reveal>
+          <h3>Why teams switch</h3>
+          <p>Most teams do not need more leads. They need a controlled system for what happens after the lead arrives. Arc Relay replaces fragmented inboxes, inconsistent rep behavior, and invisible callback debt with one accountable operating layer.</p>
+          <div class="dashboard-shot"><img src="/logos/2.png" alt="Arc Relay pipeline view" loading="lazy" /></div>
+          <div class="signal-list">
+            <div class="signal-item"><strong>Response</strong><div>Quiet hours, retry logic, and owner routing are configured instead of improvised.</div></div>
+            <div class="signal-item"><strong>Visibility</strong><div>Leadership sees throughput, drop-off, and operator accountability without spreadsheet cleanup.</div></div>
+            <div class="signal-item"><strong>Scale</strong><div>The same playbooks can be reused across teams and workspaces with controlled access.</div></div>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section class="section" id="platform">
+      <div class="section-head reveal" data-reveal>
+        <h2>The command surface for inbound revenue.</h2>
+        <p>Arc Relay is not a generic chatbot landing page. It is an operator interface for triage, recovery, booking, and accountability across the full inbound lifecycle.</p>
+      </div>
+      <div class="cards three">
+        <article class="card reveal" data-reveal><h3>Conversation control</h3><p>Every thread stays attached to context: source, urgency, owner, business record, and next action.</p><ul><li>Unified messages and callbacks</li><li>Structured escalation paths</li><li>Clear handoff from automation to staff</li></ul></article>
+        <article class="card reveal" data-reveal><h3>Revenue accountability</h3><p>Track where opportunities stall and which operating changes are actually improving conversion.</p><ul><li>Booked outcome visibility</li><li>Recovered revenue movement</li><li>Performance by channel and queue state</li></ul></article>
+        <article class="card reveal" data-reveal><h3>Operational guardrails</h3><p>Arc Relay is structured for real SaaS use, with tenant-aware isolation and controlled execution behavior.</p><ul><li>Scoped workspace access</li><li>Deterministic workflow rules</li><li>Action-level audit history</li></ul></article>
+      </div>
+      <div class="quote reveal" data-reveal><p>Arc Relay turns "someone should follow up" into a system that actually does.</p><span>Built for operationally serious teams that want speed, consistency, and a clean revenue trail.</span></div>
+    </section>
+    <section class="section">
+      <div class="section-head reveal" data-reveal>
+        <h2>Where Arc Relay lands fastest.</h2>
+        <p>Best fit for high-intent inbound categories with repeatable booking workflows and measurable callback loss.</p>
+      </div>
+      <div class="cards four">
+        <article class="card reveal" data-reveal><h3>Home services</h3><p>Recover emergency jobs, same-day requests, and after-hours calls before they go to the next provider.</p></article>
+        <article class="card reveal" data-reveal><h3>Med spas</h3><p>Route consult demand, appointment questions, and lead nurturing through one controlled system.</p></article>
+        <article class="card reveal" data-reveal><h3>Auto detailing</h3><p>Turn quote requests and reactivation campaigns into filled schedule capacity.</p></article>
+        <article class="card reveal" data-reveal><h3>Local clinics</h3><p>Handle missed calls, inbound scheduling intent, and follow-up reminders with stronger operator visibility.</p></article>
+      </div>
+    </section>
+    <section class="section" id="pricing">
+      <div class="section-head reveal" data-reveal>
+        <h2>Choose the Arc Relay operating plan.</h2>
+        <p>Checkout stays connected to onboarding and workspace provisioning so each new client launches from a controlled setup flow.</p>
+      </div>
+      <div class="pricing-grid">
+        <article class="pricing-card reveal" data-reveal><p class="plan-name">Starter</p><p class="plan-price">$149<span style="font-size:16px;font-weight:600;">/mo</span></p><p class="plan-note">For operators validating inbound capture and callback recovery.</p><ul class="plan-list"><li>Lead capture and shared inbox</li><li>Core follow-up workflows</li><li>Monthly performance summary</li></ul><button class="btn" type="button" data-open-pricing="1">Choose Starter</button></article>
+        <article class="pricing-card featured reveal" data-reveal><p class="plan-name">Pro</p><p class="plan-price">$299<span style="font-size:16px;font-weight:600;">/mo</span></p><p class="plan-note">Best for teams that need stronger controls, more automation, and cleaner reporting.</p><ul class="plan-list"><li>Advanced playbooks and queue controls</li><li>Operator and manager visibility surfaces</li><li>Outcome intelligence dashboard</li></ul><button class="btn btn-primary" type="button" data-open-pricing="1">Choose Pro</button></article>
+        <article class="pricing-card reveal" data-reveal><p class="plan-name">Growth</p><p class="plan-price">$549<span style="font-size:16px;font-weight:600;">/mo</span></p><p class="plan-note">For higher-volume teams running multiple lanes or multi-workspace operations.</p><ul class="plan-list"><li>Multi-workspace control</li><li>Advanced reporting and lifecycle analytics</li><li>Priority onboarding support</li></ul><button class="btn" type="button" data-open-pricing="1">Choose Growth</button></article>
+      </div>
+      <div class="cta reveal" data-reveal>
+        <div><h2>Replace callback chaos with a real revenue operating system.</h2><p>Start with checkout, connect your workspace, and launch Arc Relay with your own routing and follow-up policy.</p></div>
+        <button class="btn btn-primary" type="button" data-open-pricing="1">Start checkout</button>
+      </div>
+    </section>
+    <footer class="footer">
+      <span>© 2026 Arc Relay. Built for operationally serious teams.</span>
+      <div class="footer-links"><a href="#platform">Platform</a><a href="#pricing">Pricing</a><a href="/demo">Demo</a><a href="/dashboard">Client login</a><a href="mailto:hello@arcrelay.com">Contact</a></div>
+    </footer>
+  </main>
+  <div id="pricingOverlay" class="pricing-overlay hidden" aria-hidden="true">
+    <div id="pricing-modal" class="pricing-modal" role="dialog" aria-modal="true" aria-labelledby="pricingTitle">
+      <div class="pricing-head"><div><h3 id="pricingTitle">Launch your Arc Relay workspace</h3><p class="fine">Enter your business and billing email, then continue into secure Stripe checkout.</p></div><button id="pricingCloseBtn" class="btn" type="button">Close</button></div>
+      <div class="lead-grid">
+        <label><span>Business name</span><input id="checkoutBusinessName" type="text" placeholder="Acme Services" /></label>
+        <label><span>Work email</span><input id="checkoutEmail" type="email" placeholder="owner@business.com" /></label>
+        <div class="fine-box fine">Checkout creates the subscription and connects your onboarding request so provisioning stays tied to the correct workspace identity.</div>
+      </div>
+      <p id="checkoutStatus" class="fine" style="min-height: 20px; margin: 0 0 12px 0;"></p>
+      <div class="pricing-grid">
+        <article class="pricing-card"><p class="plan-name">Starter</p><p class="plan-price">$149<span style="font-size:16px;font-weight:600;">/mo</span></p><p class="plan-note">For teams validating demand capture.</p><ul class="plan-list"><li>Lead capture and inbox</li><li>Core follow-up workflows</li><li>Monthly performance summary</li></ul><button class="btn" type="button" data-checkout-plan="starter">Continue with Starter</button></article>
+        <article class="pricing-card featured"><p class="plan-name">Pro</p><p class="plan-price">$299<span style="font-size:16px;font-weight:600;">/mo</span></p><p class="plan-note">Best fit for growth-focused operators.</p><ul class="plan-list"><li>Advanced conversion playbooks</li><li>Priority automations and controls</li><li>Outcome intelligence dashboard</li></ul><button class="btn btn-primary" type="button" data-checkout-plan="pro">Continue with Pro</button></article>
+        <article class="pricing-card"><p class="plan-name">Growth</p><p class="plan-price">$549<span style="font-size:16px;font-weight:600;">/mo</span></p><p class="plan-note">For high-volume teams and multi-workspace operations.</p><ul class="plan-list"><li>Multi-workspace controls</li><li>Advanced analytics and reporting</li><li>Priority onboarding support</li></ul><button class="btn" type="button" data-checkout-plan="growth">Continue with Growth</button></article>
+      </div>
+    </div>
+  </div>
+  <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch theme" title="Switch theme">
+    <svg class="icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2.4M12 19.6V22M4.93 4.93l1.7 1.7M17.37 17.37l1.7 1.7M2 12h2.4M19.6 12H22M4.93 19.07l1.7-1.7M17.37 6.63l1.7-1.7"></path></svg>
+    <svg class="icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.4 14.8A8.8 8.8 0 1 1 9.2 3.6a7.3 7.3 0 1 0 11.2 11.2z"></path></svg>
+  </button>
+</body>
+</html>
+
+
+

@@ -1,0 +1,44 @@
+“Make it Claude-Code-like” Prompt (autonomous file exploration)
+
+Use when Codex starts asking for @file references:
+
+Act autonomously:
+Explore the repo yourself to find the correct files and patterns.
+Do not ask me for file paths unless access is impossible.
+Always cite exact file paths you examined.
+
+
+
+
+Act autonomously but within HALCYON architecture rules:
+
+1) Explore the repository yourself to locate:
+   - existing atlas images
+   - tilesetMeta JSON files
+   - world data structures
+   - existing instancing patterns
+   - SceneView integration points
+
+2) DO NOT ask me for file paths unless:
+   - files truly cannot be located
+   - or repository structure is inconsistent.
+
+3) Always reference EXACT file paths you inspected before modifying anything.
+
+4) Extend existing patterns instead of creating new ones:
+   - reuse existing loaders
+   - reuse instancing systems
+   - reuse shader modification pattern (onBeforeCompile)
+
+5) Never introduce parallel systems.
+   If similar logic already exists, integrate with it.
+
+6) Respect architecture separation:
+   - game simulation stays outside renderer
+   - renderer reads world state only.
+
+7) Before writing code:
+   briefly summarize what you discovered in the repo structure.
+
+8) After changes:
+   list modified files and explain why each was changed.

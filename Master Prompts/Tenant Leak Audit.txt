@@ -1,0 +1,8 @@
+“Tenant Leak Audit” Prompt (enterprise-grade safety)
+
+Run this anytime you add new routes/services:
+
+Audit only (no edits):
+Find every place this feature touches persisted data and confirm it is scoped by req.tenant.accountId.
+List any unscoped reads/writes and the exact file+function where they occur.
+Then propose minimal fixes.

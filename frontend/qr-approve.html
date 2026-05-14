@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Approve QR Sign In</title>
+  <meta name="description" content="Approve a Relay QR desktop sign-in from your phone." />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #06101f;
+      --panel: rgba(10, 18, 32, 0.94);
+      --border: rgba(255,255,255,0.1);
+      --text: #eef7ff;
+      --muted: rgba(218,231,247,0.72);
+      --accent: #8ef0b6;
+      --accent-2: #58b3ff;
+      --danger: #ff9a9a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(57,181,255,0.18), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(142,240,182,0.12), transparent 30%),
+        linear-gradient(180deg, #07111f, #020814);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+    .qr-card {
+      width: min(100%, 460px);
+      padding: 28px;
+      border-radius: 26px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      box-shadow: 0 28px 80px rgba(0,0,0,0.42);
+      display: grid;
+      gap: 18px;
+    }
+    .qr-mark {
+      font-size: 44px;
+      line-height: 1;
+    }
+    h1 {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+    .field span {
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(232,241,255,0.88);
+    }
+    .input {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      padding: 13px 14px;
+      outline: none;
+    }
+    .input:focus {
+      border-color: rgba(88,179,255,0.7);
+      box-shadow: 0 0 0 3px rgba(88,179,255,0.16);
+    }
+    .btn {
+      appearance: none;
+      border: 0;
+      border-radius: 16px;
+      min-height: 48px;
+      padding: 0 18px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #07111f;
+      background: linear-gradient(180deg, var(--accent), #75d89d);
+    }
+    .btn.secondary {
+      color: var(--text);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .btn:disabled {
+      opacity: 0.65;
+      cursor: default;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .row > * { flex: 1; }
+    .status {
+      min-height: 18px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--accent); }
+    .panel {
+      display: grid;
+      gap: 14px;
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .hidden { display: none !important; }
+    .user-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(88,179,255,0.12);
+      color: rgba(232,241,255,0.92);
+      font-size: 12px;
+      width: fit-content;
+    }
+  </style>
+</head>
+<body>
+  <main class="qr-card">
+    <div class="qr-mark" aria-hidden="true">&#128241;</div>
+    <div>
+      <h1>Approve Desktop Sign In</h1>
+      <p id="qrLead">Review this request on your phone and approve it to sign in on desktop.</p>
+    </div>
+
+    <section class="panel hidden" id="qrSignedInPanel">
+      <div class="user-pill" id="qrUserPill"></div>
+      <p>You are already signed in on this phone. Approve this desktop request when you are ready.</p>
+      <button class="btn" type="button" id="qrApproveBtn">Approve Sign In</button>
+    </section>
+
+    <form class="panel hidden" id="qrLoginForm" autocomplete="on">
+      <p>Sign in on this phone first, then Relay will approve the desktop request immediately.</p>
+      <label class="field">
+        <span>Email</span>
+        <input class="input" id="qrEmail" type="email" placeholder="you@business.com" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input class="input" id="qrPassword" type="password" placeholder="Password" required />
+      </label>
+      <div class="row">
+        <button class="btn" type="submit" id="qrLoginApproveBtn">Sign In And Approve</button>
+      </div>
+    </form>
+
+    <section class="panel hidden" id="qrDonePanel">
+      <p class="status success">Desktop sign-in approved. You can return to your computer now.</p>
+    </section>
+
+    <p class="status" id="qrStatus"></p>
+  </main>
+  <script src="/js/qr-approve.js?v=20260311-perf1" defer></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+“Error-Proof Mode” Prompt (no more console explosions)
+
+Use when you see runtime errors like your toast issue:
+
+Harden error handling:
+- No unhandled promise rejections.
+- All API failures must degrade gracefully with a user-friendly inline state.
+- No UI should crash if an endpoint is missing (show demo/coming soon).
+Identify and fix any temporal dead zone or initialization-order bugs.

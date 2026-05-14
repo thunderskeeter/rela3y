@@ -1,0 +1,7 @@
+Use when you’re scared Codex will refactor too much:
+
+Implement this feature with the smallest possible diff:
+- Change only the necessary files.
+- Prefer adding small helper functions over reorganizing modules.
+- If you feel tempted to refactor, stop and ask: “Is this required for functionality?” If not, don’t do it.
+First output a file-by-file plan with <10 bullets total.
