@@ -31,8 +31,18 @@ const noBodySchema = z.object({}).strict().optional().default({});
 
 devRouter.use((req, res, next) => {
   if (!String(req?.path || '').startsWith('/dev')) return next();
-  if (DEV_MODE !== true) return res.status(404).json({ error: 'Not found' });
   if (!hasDeveloperAccess(req?.user)) return res.status(403).json({ error: 'Forbidden' });
+  if (DEV_MODE !== true && String(req?.method || '').toUpperCase() === 'GET' && String(req?.path || '') === '/dev/settings') {
+    return res.json({
+      settings: {
+        enabled: false,
+        autoCreateTenants: false,
+        verboseTenantLogs: false,
+        simulateOutbound: false,
+        productionLocked: true
+      }
+    });
+  }
   return next();
 });
 
@@ -42,6 +52,9 @@ devRouter.get('/dev/settings', (_req, res) => {
 });
 
 devRouter.patch('/dev/settings', validateBody(settingsPatchSchema), (req, res) => {
+  if (DEV_MODE !== true) {
+    return res.status(403).json({ error: 'Developer settings are locked in production' });
+  }
   try {
     const patch = req.body || {};
     const settings = updateDevSettings(patch);

@@ -9,7 +9,7 @@ validateRuntimeConfig();
 const { createApp } = require('./src/app');
 const { runMigrations } = require('./src/db/migrate');
 const { backfillTenantAccountIds } = require('./src/services/tenantMigration');
-const { ensureDefaultSuperadminUser, ensureBootstrapOwnerUser } = require('./src/utils/auth');
+const { ensureDefaultSuperadminUser, ensureBootstrapOwnerUser, ensureDeveloperAccessUsers } = require('./src/utils/auth');
 const { initFlows } = require('./src/store/initFlows');
 const { DEV_MODE } = require('./src/config/runtime');
 const { initDataStore, flushDataNow, loadData, saveDataDebounced } = require('./src/store/dataStore');
@@ -54,6 +54,7 @@ async function bootstrap() {
   backfillTenantAccountIds();
   ensureDefaultSuperadminUser();
   ensureBootstrapOwnerUser();
+  ensureDeveloperAccessUsers();
 
   // Initialize flow templates on startup
   initFlows();

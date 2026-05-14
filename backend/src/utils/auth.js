@@ -411,6 +411,52 @@ function shouldGrantBootstrapDeveloperAccess(email) {
   return normalizeEmail(process.env.BOOTSTRAP_OWNER_EMAIL || '') === normalized;
 }
 
+function accountLooksLikeArcRelayOwnerAccount(account) {
+  const names = [
+    account?.businessName,
+    account?.workspace?.identity?.businessName,
+    account?.workspace?.businessName
+  ].map((value) => String(value || '').trim().toLowerCase());
+  return names.includes('arc relay') || names.includes('arcrelay');
+}
+
+function ensureDeveloperAccessUsers() {
+  const data = ensureAuthCollections(loadData());
+  const configuredEmails = new Set(
+    [
+      ...String(process.env.DEVELOPER_ACCESS_EMAILS || '').split(','),
+      process.env.BOOTSTRAP_OWNER_EMAIL
+    ]
+      .map((entry) => normalizeEmail(entry))
+      .filter(Boolean)
+  );
+  const allowArcRelayOwner = String(process.env.ARC_RELAY_OWNER_DEVELOPER_ACCESS || '').trim().toLowerCase() !== 'false';
+  let changed = false;
+
+  for (const user of data.users) {
+    const email = normalizeEmail(user?.email);
+    const role = normalizeRole(user?.role);
+    let shouldGrant = configuredEmails.has(email);
+    if (!shouldGrant && allowArcRelayOwner && role === 'owner') {
+      const accountIds = Array.isArray(user.accountIds) ? user.accountIds : [];
+      shouldGrant = accountIds.some((accountId) => {
+        const found = getAccountById(data, accountId);
+        return accountLooksLikeArcRelayOwnerAccount(found?.account);
+      });
+    }
+    if (shouldGrant && user.developerAccess !== true) {
+      user.developerAccess = true;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    saveDataDebounced(data);
+    flushDataNow();
+    console.warn('[auth] developer access ensured for configured Arc Relay owner user(s).');
+  }
+}
+
 function ensureBootstrapOwnerUser() {
   const email = normalizeEmail(process.env.BOOTSTRAP_OWNER_EMAIL || '');
   const password = String(process.env.BOOTSTRAP_OWNER_PASSWORD || '');
@@ -476,6 +522,7 @@ module.exports = {
   sanitizeUser,
   canUserAccessAccount,
   hasDeveloperAccess,
+  ensureDeveloperAccessUsers,
   issueSessionForUser,
   parseSessionToken,
   destroySessionToken,
