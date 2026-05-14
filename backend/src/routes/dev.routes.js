@@ -5,6 +5,7 @@ const { handleSignal } = require('../services/revenueOrchestrator');
 const { runPassiveRevenueMonitoring, runReactivationScan } = require('../services/passiveRevenueMonitoring');
 const { optimizeOutcomePacks } = require('../services/optimizationService');
 const { startRun, replayRun } = require('../services/agentEngine');
+const { recordSimulatedConversation } = require('../services/conversationsService');
 const { z, validateBody } = require('../utils/validate');
 const { DEV_MODE } = require('../config/runtime');
 const { hasDeveloperAccess } = require('../utils/auth');
@@ -423,7 +424,39 @@ devRouter.post('/dev/revenue/simulate', validateBody(simulateSchema), async (req
         conversation: simulatedConversation
       };
       if (DEV_MODE !== true) {
-        return res.json({ ...simulatedResponse, persisted: false });
+        const leadData = {
+          intent: selectedService.name,
+          request: `${selectedService.name} + ${selectedExtra}`,
+          service_required: `${selectedService.name} + ${selectedExtra}`,
+          services_list: [selectedService.name, selectedExtra],
+          services_summary: `- ${selectedService.name}\n- ${selectedExtra}`,
+          vehicle_model: selectedService.detail,
+          simulated: true
+        };
+        const messages = simulatedConversation.map((item, index) => ({
+          id: `sim_${Date.now()}_${index}`,
+          role: item.role,
+          direction: item.role === 'customer' ? 'inbound' : 'outbound',
+          dir: item.role === 'customer' ? 'in' : 'out',
+          text: item.text,
+          body: item.text,
+          meta: item.meta || {},
+          payload: item.payload || {},
+          to,
+          from: simulatedFrom,
+          ts: Date.now() + index,
+          status: 'simulated',
+          source: 'dev_simulator'
+        }));
+        const persistedConversation = await recordSimulatedConversation({
+          tenant,
+          to,
+          from: simulatedFrom,
+          messages,
+          leadData,
+          amount: priceEstimate
+        });
+        return res.json({ ...simulatedResponse, persisted: true, savedConversation: persistedConversation });
       }
       await simulateSignal(tenant, { from: simulatedFrom, type: 'missed_call', channel: 'call', payload: { detail: selectedService.name } });
       await outboundWithLog(aiIntro);

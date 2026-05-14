@@ -263,6 +263,9 @@ function mergeServiceLeadData(convo) {
 }
 
 function resolveBookedLifecycle(convo) {
+  if (isSimulatedConversation(convo)) {
+    return { bookedLike: false, bookingMs: null };
+  }
   const ld = convo?.leadData || {};
   const status = String(convo?.status || '').trim().toLowerCase();
   const stage = String(convo?.stage || '').trim().toLowerCase();
@@ -296,6 +299,15 @@ function resolveBookedLifecycle(convo) {
   };
 }
 
+function isSimulatedConversation(convo) {
+  const ld = convo?.leadData || {};
+  return convo?.isSimulated === true
+    || String(convo?.source || '').toLowerCase() === 'simulated'
+    || String(convo?.status || '').toLowerCase() === 'simulated'
+    || String(convo?.stage || '').toLowerCase() === 'simulated'
+    || ld?.simulated === true;
+}
+
 // List threads (basic)
 messagesRouter.get('/threads', async (req, res) => {
   const tenant = req.tenant;
@@ -317,16 +329,21 @@ messagesRouter.get('/conversations', async (req, res) => {
   })).map((conversation) => ({ key: conversation.id, convo: conversation }));
 
   const conversations = items.map(({ key, convo: c }) => {
+    const simulated = isSimulatedConversation(c);
     const booked = resolveBookedLifecycle(c);
     const resolvedAmount = resolveConversationAmount(c);
     const resolvedAmountCents = Number.isFinite(resolvedAmount) && resolvedAmount > 0
       ? Math.round(Number(resolvedAmount) * 100)
       : null;
     const leadDataMerged = mergeServiceLeadData(c);
-    const normalizedStatus = booked.bookedLike && String(c?.status || '').toLowerCase() !== 'closed'
+    const normalizedStatus = simulated
+      ? 'simulated'
+      : booked.bookedLike && String(c?.status || '').toLowerCase() !== 'closed'
       ? 'booked'
       : (c?.status || '');
-    const normalizedStage = booked.bookedLike
+    const normalizedStage = simulated
+      ? 'simulated'
+      : booked.bookedLike
       ? 'booked'
       : (c?.stage || '');
     return {
@@ -336,11 +353,13 @@ messagesRouter.get('/conversations', async (req, res) => {
       lastText: c.messages?.length ? c.messages[c.messages.length - 1].text : '',
       stage: normalizedStage,
       status: normalizedStatus,
+      source: simulated ? 'simulated' : (c.source || ''),
+      isSimulated: simulated,
       amount: c.amount ?? resolvedAmount ?? null,
       bookingAmount: c.bookingAmount ?? resolvedAmount ?? null,
       resolvedAmount: resolvedAmount ?? null,
       resolvedAmountCents,
-      bookingTime: c.bookingTime ?? booked.bookingMs ?? null,
+      bookingTime: simulated ? null : (c.bookingTime ?? booked.bookingMs ?? null),
       paymentStatus: c.paymentStatus || c.payment_status || '',
       accountId: c.accountId || '',
       lastActivityAt: c.lastActivityAt || null,
@@ -381,6 +400,18 @@ messagesRouter.get('/conversations/:id', validateParams(conversationIdSchema), a
     }
   }
   convo.leadData = mergeServiceLeadData(convo);
+  if (isSimulatedConversation(convo)) {
+    convo.source = 'simulated';
+    convo.isSimulated = true;
+    convo.status = 'simulated';
+    convo.stage = 'simulated';
+    convo.bookingTime = null;
+    convo.bookingEndTime = null;
+    delete convo.leadData.booking_time;
+    delete convo.leadData.bookingTime;
+    delete convo.leadData.booking_end_time;
+    delete convo.leadData.bookingEndTime;
+  }
   
   res.json({ conversation: convo });
 });

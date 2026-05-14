@@ -20,6 +20,26 @@ function buildConvoKey(to, from) {
   return `${String(to || '')}__${String(from || '')}`;
 }
 
+function stripBookingSignalsFromSimulatedMessage(message = {}) {
+  const meta = message?.meta && typeof message.meta === 'object' ? { ...message.meta } : {};
+  const payload = message?.payload && typeof message.payload === 'object' ? { ...message.payload } : {};
+  delete meta.bookingConfirmed;
+  delete meta.bookingTime;
+  delete meta.booking_time;
+  delete payload.bookingConfirmed;
+  delete payload.bookingTime;
+  delete payload.booking_time;
+  return {
+    ...message,
+    meta: { ...meta, simulated: true },
+    payload: { ...payload, simulated: true },
+    bookingTime: null,
+    booking_time: null,
+    status: 'simulated',
+    source: 'dev_simulator'
+  };
+}
+
 function normalizeConversationForRead(conversation) {
   const convo = conversation && typeof conversation === 'object'
     ? JSON.parse(JSON.stringify(conversation))
@@ -404,6 +424,117 @@ async function mutateFlowConversation({ tenant, to, from, requireExisting = fals
   });
 }
 
+async function recordSimulatedConversation({ tenant, to, from, messages = [], leadData = {}, amount = null }) {
+  const accountId = String(tenant?.accountId || '');
+  const convoKey = buildConvoKey(to, from);
+  const now = Date.now();
+  const safeMessages = (Array.isArray(messages) ? messages : []).map(stripBookingSignalsFromSimulatedMessage);
+  const safeLeadData = leadData && typeof leadData === 'object' ? { ...leadData, simulated: true } : { simulated: true };
+  delete safeLeadData.booking_time;
+  delete safeLeadData.bookingTime;
+  delete safeLeadData.booking_end_time;
+  delete safeLeadData.bookingEndTime;
+  delete safeLeadData.payment_status;
+  delete safeLeadData.paymentStatus;
+
+  if (!(USE_DB_CONVERSATIONS || USE_DB_MESSAGES)) {
+    const { updateConversation } = require('../store/dataStore');
+    const conversation = updateConversation(to, from, (convo) => {
+      convo.id = convoKey;
+      convo.accountId = accountId;
+      convo.to = String(to || '');
+      convo.from = String(from || '');
+      convo.source = 'simulated';
+      convo.isSimulated = true;
+      convo.status = 'simulated';
+      convo.stage = 'simulated';
+      convo.bookingTime = null;
+      convo.bookingEndTime = null;
+      convo.paymentStatus = '';
+      convo.amount = Number.isFinite(Number(amount)) && Number(amount) > 0 ? Number(amount) : null;
+      convo.leadData = safeLeadData;
+      convo.messages = safeMessages.map((message, index) => ({
+        id: String(message?.id || `sim_${now}_${index}`),
+        direction: String(message?.direction || (message?.role === 'customer' ? 'inbound' : 'outbound')),
+        dir: String(message?.dir || (message?.role === 'customer' ? 'in' : 'out')),
+        text: String(message?.text || message?.body || ''),
+        body: String(message?.body || message?.text || ''),
+        meta: message.meta || { simulated: true },
+        payload: message.payload || { simulated: true },
+        to,
+        from,
+        ts: Number(message?.ts || now + index),
+        status: 'simulated',
+        source: 'dev_simulator'
+      }));
+      convo.lastActivityAt = now;
+      convo.updatedAt = now;
+      convo.audit = Array.isArray(convo.audit) ? convo.audit : [];
+      convo.audit.push({ ts: now, type: 'simulation_created', meta: { source: 'dev_simulator' } });
+    }, accountId);
+    return normalizeConversationForRead({ ...conversation, id: convoKey });
+  }
+
+  return withTransaction(pool, async (db) => {
+    let conversation = await getByConvoKey(db, accountId, convoKey);
+    if (!conversation) {
+      conversation = await createIfMissing(db, accountId, {
+        convoKey,
+        to,
+        from,
+        status: 'simulated',
+        stage: 'simulated',
+        audit: [],
+        leadData: safeLeadData,
+        amount: Number.isFinite(Number(amount)) && Number(amount) > 0 ? Number(amount) : null,
+        createdAt: now,
+        updatedAt: now,
+        lastActivityAt: now,
+        payload: { source: 'simulated', isSimulated: true }
+      });
+    }
+    const audit = Array.isArray(conversation.audit) ? [...conversation.audit] : [];
+    audit.push({ ts: now, type: 'simulation_created', meta: { source: 'dev_simulator' } });
+    await updateByConvoKey(db, accountId, convoKey, {
+      to,
+      from,
+      status: 'simulated',
+      stage: 'simulated',
+      audit,
+      leadData: safeLeadData,
+      amount: Number.isFinite(Number(amount)) && Number(amount) > 0 ? Number(amount) : null,
+      paymentStatus: '',
+      lastActivityAt: now,
+      updatedAt: now,
+      payload: { source: 'simulated', isSimulated: true }
+    });
+    for (let index = 0; index < safeMessages.length; index += 1) {
+      const message = safeMessages[index] || {};
+      const direction = String(message?.direction || (message?.role === 'customer' ? 'inbound' : 'outbound'));
+      const createdAt = now + index;
+      await insertIdempotent(db, accountId, convoKey, {
+        id: String(message?.id || `sim_${now}_${index}`),
+        direction,
+        body: String(message?.body || message?.text || ''),
+        status: 'simulated',
+        idempotencyKey: `simulation:${convoKey}:${index}`,
+        createdAt,
+        updatedAt: createdAt,
+        to,
+        from,
+        payload: buildMessagePayloadProjection({
+          meta: {
+            ...(message?.meta || {}),
+            source: 'dev_simulator',
+            simulated: true
+          }
+        })
+      });
+    }
+    return normalizeConversationForRead(await getByConvoKey(db, accountId, convoKey));
+  });
+}
+
 async function reconcileSnapshotConversationsToDb({ accountId = null } = {}) {
   const data = loadData();
   const entries = Object.entries(data.conversations || {})
@@ -443,6 +574,7 @@ module.exports = {
   recordBookingSync,
   updateConversationStatus,
   mutateFlowConversation,
+  recordSimulatedConversation,
   reconcileSnapshotConversationsToDb,
   normalizeConversationForRead
 };
