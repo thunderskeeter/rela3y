@@ -373,6 +373,21 @@ function isStrongBootstrapPassword(password) {
   return true;
 }
 
+function ensureBootstrapBilling(account) {
+  const now = Date.now();
+  account.billing = account.billing && typeof account.billing === 'object' ? account.billing : {};
+  account.billing.provider = account.billing.provider || 'bootstrap';
+  account.billing.isLive = true;
+  account.billing.updatedAt = now;
+  account.billing.plan = account.billing.plan && typeof account.billing.plan === 'object' ? account.billing.plan : {};
+  account.billing.plan.key = account.billing.plan.key || 'pilot';
+  account.billing.plan.status = 'active';
+  account.billing.plan.nextBillingAt = account.billing.plan.nextBillingAt || now + (30 * 24 * 60 * 60 * 1000);
+  account.billing.dunning = account.billing.dunning && typeof account.billing.dunning === 'object' ? account.billing.dunning : {};
+  account.billing.dunning.lockedAt = null;
+  account.billing.dunning.graceEndsAt = null;
+}
+
 function ensureBootstrapOwnerUser() {
   const email = normalizeEmail(process.env.BOOTSTRAP_OWNER_EMAIL || '');
   const password = String(process.env.BOOTSTRAP_OWNER_PASSWORD || '');
@@ -398,6 +413,7 @@ function ensureBootstrapOwnerUser() {
   account.id = accountId;
   account.accountId = accountId;
   account.businessName = account.businessName || process.env.BOOTSTRAP_BUSINESS_NAME || 'Arc Relay';
+  ensureBootstrapBilling(account);
 
   const existing = data.users.find((u) => normalizeEmail(u?.email) === email);
   if (existing) {
