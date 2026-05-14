@@ -3225,7 +3225,6 @@ let _renderId = 0;  // guard against concurrent async renders
 
 async function render(){
   const thisRender = ++_renderId;
-  console.log("render view:", state.view);
   if (!authState.user) {
     await ensureDeferredStyles();
     showLoginOverlay();
