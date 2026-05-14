@@ -7,6 +7,7 @@ const { optimizeOutcomePacks } = require('../services/optimizationService');
 const { startRun, replayRun } = require('../services/agentEngine');
 const { z, validateBody } = require('../utils/validate');
 const { DEV_MODE } = require('../config/runtime');
+const { hasDeveloperAccess } = require('../utils/auth');
 
 const devRouter = express.Router();
 const settingsPatchSchema = z.object({
@@ -31,8 +32,7 @@ const noBodySchema = z.object({}).strict().optional().default({});
 devRouter.use((req, res, next) => {
   if (!String(req?.path || '').startsWith('/dev')) return next();
   if (DEV_MODE !== true) return res.status(404).json({ error: 'Not found' });
-  const role = String(req?.user?.role || '').toLowerCase();
-  if (role !== 'superadmin') return res.status(403).json({ error: 'Forbidden' });
+  if (!hasDeveloperAccess(req?.user)) return res.status(403).json({ error: 'Forbidden' });
   return next();
 });
 

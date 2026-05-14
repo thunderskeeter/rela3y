@@ -82,11 +82,10 @@ function normalizeNavPlanKey(planKey) {
 }
 function canAccessDeveloperTools() {
   const role = String(authState?.user?.role || "").toLowerCase();
-  return role === "superadmin" || role === "owner";
+  return role === "superadmin" || authState?.user?.developerAccess === true;
 }
 function canAccessDeveloperRoutes() {
-  const role = String(authState?.user?.role || "").toLowerCase();
-  return role === "superadmin";
+  return canAccessDeveloperTools();
 }
 function canAccessWorkspaceAdmin() {
   const role = String(authState?.user?.role || "").toLowerCase();

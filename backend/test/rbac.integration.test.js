@@ -37,6 +37,41 @@ async function run() {
   await seedBaseline();
   {
     const agent = request.agent(app);
+    const csrf = await login(agent, { email: OWNER_EMAIL, password: OWNER_PASSWORD });
+
+    const ownerWithoutDeveloperAccess = await agent
+      .patch(`/api/dev/settings?to=${encodeURIComponent(ACCOUNT_A_TO)}`)
+      .set('x-csrf-token', csrf)
+      .send({ verboseTenantLogs: true });
+    assert.equal(ownerWithoutDeveloperAccess.statusCode, 403);
+  }
+
+  await seedBaseline();
+  {
+    const { loadData, saveDataDebounced, flushDataNow } = require('../src/store/dataStore');
+    const data = loadData();
+    const owner = data.users.find((u) => u.email === OWNER_EMAIL);
+    owner.developerAccess = true;
+    saveDataDebounced(data);
+    await flushDataNow();
+
+    const agent = request.agent(app);
+    const csrf = await login(agent, { email: OWNER_EMAIL, password: OWNER_PASSWORD });
+    const me = await agent.get('/api/auth/me');
+    assert.equal(me.statusCode, 200);
+    assert.equal(me.body?.user?.developerAccess, true);
+
+    const ownerWithDeveloperAccess = await agent
+      .patch(`/api/dev/settings?to=${encodeURIComponent(ACCOUNT_A_TO)}`)
+      .set('x-csrf-token', csrf)
+      .send({ verboseTenantLogs: true });
+    assert.equal(ownerWithDeveloperAccess.statusCode, 200);
+    assert.equal(ownerWithDeveloperAccess.body?.ok, true);
+  }
+
+  await seedBaseline();
+  {
+    const agent = request.agent(app);
     const csrf = await login(agent, { email: SUPERADMIN_EMAIL, password: SUPERADMIN_PASSWORD });
 
     const missingCsrf = await agent

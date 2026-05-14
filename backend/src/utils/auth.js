@@ -87,10 +87,18 @@ function sanitizeUser(user) {
     email: normalizeEmail(user.email),
     role: normalizeRole(user.role) || 'readonly',
     accountIds: Array.isArray(user.accountIds) ? user.accountIds.map((x) => String(x)).filter(Boolean) : [],
+    developerAccess: user.developerAccess === true,
     createdAt: Number(user.createdAt || 0),
     lastLoginAt: user.lastLoginAt ? Number(user.lastLoginAt) : null,
     disabled: user.disabled === true
   };
+}
+
+function hasDeveloperAccess(user) {
+  const safeUser = sanitizeUser(user);
+  if (!safeUser || safeUser.disabled === true) return false;
+  if (safeUser.role === 'superadmin') return true;
+  return safeUser.developerAccess === true;
 }
 
 function canUserAccessAccount(user, accountId) {
@@ -388,6 +396,21 @@ function ensureBootstrapBilling(account) {
   account.billing.dunning.graceEndsAt = null;
 }
 
+function shouldGrantBootstrapDeveloperAccess(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return false;
+  const bootstrapOptOut = String(process.env.BOOTSTRAP_OWNER_DEVELOPER_ACCESS || '').trim().toLowerCase();
+  if (bootstrapOptOut === 'false' || bootstrapOptOut === '0' || bootstrapOptOut === 'no' || bootstrapOptOut === 'off') {
+    return false;
+  }
+  const configured = String(process.env.DEVELOPER_ACCESS_EMAILS || '')
+    .split(',')
+    .map((entry) => normalizeEmail(entry))
+    .filter(Boolean);
+  if (configured.length > 0) return configured.includes(normalized);
+  return normalizeEmail(process.env.BOOTSTRAP_OWNER_EMAIL || '') === normalized;
+}
+
 function ensureBootstrapOwnerUser() {
   const email = normalizeEmail(process.env.BOOTSTRAP_OWNER_EMAIL || '');
   const password = String(process.env.BOOTSTRAP_OWNER_PASSWORD || '');
@@ -420,6 +443,7 @@ function ensureBootstrapOwnerUser() {
     existing.passwordHash = hashPassword(password);
     existing.role = 'owner';
     existing.accountIds = Array.from(new Set([...(Array.isArray(existing.accountIds) ? existing.accountIds : []), accountId]));
+    if (shouldGrantBootstrapDeveloperAccess(email)) existing.developerAccess = true;
     existing.disabled = false;
   } else {
     data.users.push({
@@ -429,6 +453,7 @@ function ensureBootstrapOwnerUser() {
       passwordHash: hashPassword(password),
       role: 'owner',
       accountIds: [accountId],
+      developerAccess: shouldGrantBootstrapDeveloperAccess(email),
       createdAt: Date.now(),
       lastLoginAt: null,
       disabled: false
@@ -450,6 +475,7 @@ module.exports = {
   verifyPassword,
   sanitizeUser,
   canUserAccessAccount,
+  hasDeveloperAccess,
   issueSessionForUser,
   parseSessionToken,
   destroySessionToken,
