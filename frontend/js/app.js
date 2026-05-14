@@ -1626,6 +1626,7 @@ const ACCOUNT_SETTINGS_CACHE_TTL_MS = 30 * 1000;
 const CONTACTS_CACHE_TTL_MS = 20 * 1000;
 const ANALYTICS_THREAD_HYDRATION_TTL_MS = 60 * 1000;
 const SIMULATED_CONVERSATIONS_STORAGE_PREFIX = "mc_simulated_conversations_v1";
+const SIMULATED_CONVERSATIONS_GLOBAL_SCOPE = "__developer_simulations__";
 
 function cloneJsonSafe(value) {
   if (value == null) return value;
@@ -5468,7 +5469,7 @@ function coerceTimestampMs(value, fallback = 0) {
 }
 
 function simulatedConversationsStorageKey(to = getActiveTo()) {
-  return `${SIMULATED_CONVERSATIONS_STORAGE_PREFIX}:${String(to || "").trim()}`;
+  return `${SIMULATED_CONVERSATIONS_STORAGE_PREFIX}:${String(to || SIMULATED_CONVERSATIONS_GLOBAL_SCOPE).trim()}`;
 }
 
 function isSimulatedConversationLike(item) {
@@ -5518,6 +5519,7 @@ function normalizeSimulatedConversation(item) {
     id,
     source: "simulated",
     isSimulated: true,
+    to: String(item.to || "").trim(),
     stage: "simulated",
     status: "simulated",
     bookingTime: null,
@@ -5532,18 +5534,63 @@ function normalizeSimulatedConversation(item) {
   };
 }
 
+function loadSimulatedRowsFromStorage(storage, key) {
+  try {
+    const raw = storage?.getItem?.(key);
+    if (!raw) return [];
+    const rows = JSON.parse(raw);
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSimulatedRowsToStorage(storage, key, rows) {
+  try {
+    storage?.setItem?.(key, JSON.stringify(rows));
+  } catch {}
+}
+
+function dedupeSimulatedConversations(rows, to = getActiveTo()) {
+  const scopedTo = String(to || "").trim();
+  const out = [];
+  const seen = new Set();
+  for (const row of rows) {
+    const normalized = normalizeSimulatedConversation(row);
+    if (!normalized) continue;
+    if (normalized.to && scopedTo && normalized.to !== scopedTo) continue;
+    if (seen.has(normalized.id)) continue;
+    seen.add(normalized.id);
+    out.push(normalized);
+  }
+  return out;
+}
+
 function loadSimulatedConversations(to = getActiveTo()) {
-  const rows = loadLS(simulatedConversationsStorageKey(to), []);
-  if (!Array.isArray(rows)) return [];
-  return rows.map(normalizeSimulatedConversation).filter(Boolean);
+  const scopedKey = simulatedConversationsStorageKey(to);
+  const globalKey = simulatedConversationsStorageKey(SIMULATED_CONVERSATIONS_GLOBAL_SCOPE);
+  return dedupeSimulatedConversations([
+    ...loadSimulatedRowsFromStorage(localStorage, scopedKey),
+    ...loadSimulatedRowsFromStorage(localStorage, globalKey),
+    ...loadSimulatedRowsFromStorage(sessionStorage, scopedKey),
+    ...loadSimulatedRowsFromStorage(sessionStorage, globalKey)
+  ], to);
 }
 
 function saveSimulatedConversation(to, conversation) {
-  const normalized = normalizeSimulatedConversation(conversation);
+  const normalized = normalizeSimulatedConversation({ ...conversation, to: String(to || "").trim() });
   if (!normalized) return null;
-  const existing = loadSimulatedConversations(to);
+  const existing = dedupeSimulatedConversations([
+    ...loadSimulatedRowsFromStorage(localStorage, simulatedConversationsStorageKey(to)),
+    ...loadSimulatedRowsFromStorage(sessionStorage, simulatedConversationsStorageKey(to)),
+    ...loadSimulatedRowsFromStorage(localStorage, simulatedConversationsStorageKey(SIMULATED_CONVERSATIONS_GLOBAL_SCOPE)),
+    ...loadSimulatedRowsFromStorage(sessionStorage, simulatedConversationsStorageKey(SIMULATED_CONVERSATIONS_GLOBAL_SCOPE))
+  ], to);
   const next = [normalized, ...existing.filter((row) => String(row?.id || "") !== normalized.id)].slice(0, 25);
-  saveLS(simulatedConversationsStorageKey(to), next);
+  for (const key of [simulatedConversationsStorageKey(to), simulatedConversationsStorageKey(SIMULATED_CONVERSATIONS_GLOBAL_SCOPE)]) {
+    saveSimulatedRowsToStorage(localStorage, key, next);
+    saveSimulatedRowsToStorage(sessionStorage, key, next);
+  }
   return normalized;
 }
 
