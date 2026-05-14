@@ -375,6 +375,56 @@ devRouter.post('/dev/revenue/simulate', validateBody(simulateSchema), async (req
       const availabilityReply = "I'm pulling up your booking link—pick any available slot that works for you and I'll confirm when it's locked in.";
       const firstReply = `Thanks for the details. I've added ${selectedExtra} to your summary—anything else you'd like to include before you grab the booking link?`;
       const followupReply = "Excellent, that's noted. Confirm the drop-off window after you pick a time and I'll send a reminder straight to your phone.";
+      const accountData = loadData();
+      const bookingAccount = accountData.accounts?.[String(to)] || null;
+      const bookingUrl = bookingAccount?.scheduling?.url || bookingAccount?.bookingUrl || 'https://calendly.com/relay';
+      const priceEstimate = Math.round(220 + Math.random() * 80);
+      const summaryLines = `${selectedService.name} + ${selectedExtra}`;
+      const priceReply = `Our ${selectedService.name} package starts at $${priceEstimate}. Here is your booking link: ${bookingUrl} When you open it, you will see your service summary (${summaryLines}) already included. Pick a time that works for you and we will confirm final pricing there.`;
+      const bookingStart = Date.now() + (3 * 24 * 60 * 60 * 1000);
+      const bookingDateLabel = new Date(bookingStart).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        weekday: "short",
+        hour: "numeric",
+        minute: "2-digit"
+      });
+      const bookingAck = `I see you booked on ${bookingDateLabel} -- We will see you then if you have any questions feel free to ask.`;
+      const simulatedConversation = [
+        { role: 'ai', text: aiIntro },
+        { role: 'customer', text: customerIntro },
+        { role: 'ai', text: aiCarSpecPrompt },
+        { role: 'customer', text: carSpecResponse },
+        { role: 'ai', text: conditionPrompt },
+        { role: 'customer', text: conditionResponse },
+        { role: 'ai', text: availabilityReply },
+        { role: 'customer', text: customerFollowup },
+        { role: 'ai', text: firstReply },
+        { role: 'ai', text: followupReply },
+        { role: 'customer', text: priceInquiry },
+        { role: 'ai', text: priceReply },
+        { role: 'ai', text: bookingAck, payload: { bookingConfirmed: true, bookingLabel: bookingDateLabel, bookingTime: bookingStart }, meta: { bookingTime: bookingStart, bookingLabel: bookingDateLabel } }
+      ];
+      const simulatedResponse = {
+        ok: true,
+        scenario,
+        to,
+        convoKey: `${to}__${simulatedFrom}`,
+        conversationId: `${to}__${simulatedFrom}`,
+        from: simulatedFrom,
+        service: selectedService.name,
+        detail: selectedService.detail,
+        extra: selectedExtra,
+        customerName,
+        customerEmail,
+        bookingTime: bookingStart,
+        price: priceEstimate,
+        bookingUrl,
+        conversation: simulatedConversation
+      };
+      if (DEV_MODE !== true) {
+        return res.json({ ...simulatedResponse, persisted: false });
+      }
       await simulateSignal(tenant, { from: simulatedFrom, type: 'missed_call', channel: 'call', payload: { detail: selectedService.name } });
       await outboundWithLog(aiIntro);
       await simulateSignal(tenant, { from: simulatedFrom, type: 'inbound_message', channel: 'sms', text: customerIntro, payload: { intent: 'book', detail: selectedService.name } });
@@ -395,22 +445,7 @@ devRouter.post('/dev/revenue/simulate', validateBody(simulateSchema), async (req
       await outboundWithLog(firstReply);
       await outboundWithLog(followupReply);
       await simulateSignal(tenant, { from: simulatedFrom, type: 'inbound_message', channel: 'sms', text: priceInquiry, payload: { intent: 'pricing' } });
-      const accountData = loadData();
-      const bookingAccount = accountData.accounts?.[String(to)] || null;
-      const bookingUrl = bookingAccount?.scheduling?.url || bookingAccount?.bookingUrl || 'https://calendly.com/relay';
-      const priceEstimate = Math.round(220 + Math.random() * 80);
-      const summaryLines = `${selectedService.name} + ${selectedExtra}`;
-      const priceReply = `Our ${selectedService.name} package starts at $${priceEstimate}. Here is your booking link: ${bookingUrl} When you open it, you will see your service summary (${summaryLines}) already included. Pick a time that works for you and we will confirm final pricing there.`;
       await outboundWithLog(priceReply);
-      const bookingStart = Date.now() + (3 * 24 * 60 * 60 * 1000);
-      const bookingDateLabel = new Date(bookingStart).toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        weekday: "short",
-        hour: "numeric",
-        minute: "2-digit"
-      });
-      const bookingAck = `I see you booked on ${bookingDateLabel} -- We will see you then if you have any questions feel free to ask.`;
       await simulateSignal(tenant, {
         from: simulatedFrom,
         type: 'booking_created',
@@ -442,37 +477,7 @@ devRouter.post('/dev/revenue/simulate', validateBody(simulateSchema), async (req
         payload: { bookingConfirmed: true, bookingLabel: bookingDateLabel, bookingTime: bookingStart },
         meta: { bookingConfirmed: true, bookingLabel: bookingDateLabel, bookingTime: bookingStart }
       });
-      return res.json({
-        ok: true,
-        scenario,
-        to,
-        convoKey: `${to}__${simulatedFrom}`,
-        conversationId: `${to}__${simulatedFrom}`,
-        from: simulatedFrom,
-        service: selectedService.name,
-        detail: selectedService.detail,
-        extra: selectedExtra,
-        customerName,
-        customerEmail,
-        bookingTime: bookingStart,
-        price: priceEstimate,
-        bookingUrl,
-        conversation: [
-          { role: 'ai', text: aiIntro },
-          { role: 'customer', text: customerIntro },
-          { role: 'ai', text: aiCarSpecPrompt },
-          { role: 'customer', text: carSpecResponse },
-          { role: 'ai', text: conditionPrompt },
-          { role: 'customer', text: conditionResponse },
-          { role: 'ai', text: availabilityReply },
-          { role: 'customer', text: customerFollowup },
-          { role: 'ai', text: firstReply },
-          { role: 'ai', text: followupReply },
-          { role: 'customer', text: priceInquiry },
-          { role: 'ai', text: priceReply },
-          { role: 'ai', text: bookingAck, payload: { bookingConfirmed: true, bookingLabel: bookingDateLabel, bookingTime: bookingStart }, meta: { bookingTime: bookingStart, bookingLabel: bookingDateLabel } }
-        ]
-      });
+      return res.json({ ...simulatedResponse, persisted: true });
     }
 
     return res.status(400).json({ error: 'Unknown scenario' });
