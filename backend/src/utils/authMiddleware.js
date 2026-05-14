@@ -66,7 +66,13 @@ function requireAccountAccess(req, res, next) {
   if (String(user.role || '').toLowerCase() === 'superadmin') return next();
   const accountId = String(req?.tenant?.accountId || '').trim();
   if (!accountId) return res.status(404).json({ error: 'Not found' });
-  if (!canUserAccessAccount(user, accountId)) return res.status(404).json({ error: 'Not found' });
+  const account = req?.tenant?.account || null;
+  const accountIds = [
+    accountId,
+    account?.accountId,
+    account?.id
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+  if (!accountIds.some((id) => canUserAccessAccount(user, id))) return res.status(404).json({ error: 'Not found' });
   return next();
 }
 
