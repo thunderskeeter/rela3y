@@ -14105,6 +14105,23 @@ function viewSettings(){
       adminStatusEl.style.color = isError ? "var(--danger, #d97373)" : "";
     }
 
+    function isAdminPasscodeFormValid() {
+      const mode = String(adminAccessState.mode || "verify");
+      const passcode = String(adminPasscodeInputEl?.value || "").trim();
+      const confirm = String(adminConfirmInputEl?.value || "").trim();
+      const current = String(adminCurrentInputEl?.value || "").trim();
+      if (!isAdminPasscodeFormat(passcode)) return false;
+      if (mode === "verify") return true;
+      if (passcode !== confirm) return false;
+      if (mode === "change" && !isAdminPasscodeFormat(current)) return false;
+      return true;
+    }
+
+    function refreshAdminPasscodeSubmitState() {
+      if (!adminSubmitBtn) return;
+      adminSubmitBtn.disabled = !isAdminPasscodeFormValid();
+    }
+
     function refreshAdminGateStatusUI() {
       if (!adminGateStatusEl) return;
       const configured = adminAccessState.configured === true;
@@ -14183,6 +14200,7 @@ function viewSettings(){
       if (adminCurrentWrapEl) adminCurrentWrapEl.style.display = changeMode ? "" : "none";
       if (adminConfirmWrapEl) adminConfirmWrapEl.style.display = verifyMode ? "none" : "";
       if (adminSubmitBtn) adminSubmitBtn.textContent = verifyMode ? "Unlock" : (setMode ? "Set passcode" : "Update passcode");
+      refreshAdminPasscodeSubmitState();
     }
 
     function openAdminPasscodeModal(mode = "verify", pendingPanel = "") {
@@ -14194,6 +14212,7 @@ function viewSettings(){
       adminModal.classList.remove("hidden");
       adminModal.setAttribute("aria-hidden", "false");
       if (adminPasscodeInputEl) adminPasscodeInputEl.focus();
+      setTimeout(refreshAdminPasscodeSubmitState, 0);
     }
 
     async function loadAdminAccessState() {
@@ -14259,7 +14278,15 @@ function viewSettings(){
     adminModal?.addEventListener("click", (e) => {
       if (e.target === adminModal) closeAdminPasscodeModal();
     });
+    [adminCurrentInputEl, adminPasscodeInputEl, adminConfirmInputEl].forEach((el) => {
+      el?.addEventListener("input", refreshAdminPasscodeSubmitState);
+      el?.addEventListener("change", refreshAdminPasscodeSubmitState);
+    });
     adminSubmitBtn?.addEventListener("click", async () => {
+      if (!isAdminPasscodeFormValid()) {
+        refreshAdminPasscodeSubmitState();
+        return;
+      }
       const mode = adminAccessState.mode;
       const passcode = String(adminPasscodeInputEl?.value || "").trim();
       const confirm = String(adminConfirmInputEl?.value || "").trim();
@@ -14295,7 +14322,7 @@ function viewSettings(){
       } catch (err) {
         setAdminPasscodeStatus(err?.message || "Admin passcode check failed.", true);
       } finally {
-        if (adminSubmitBtn) adminSubmitBtn.disabled = false;
+        refreshAdminPasscodeSubmitState();
       }
     });
 

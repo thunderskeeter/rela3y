@@ -1140,7 +1140,7 @@ accountRouter.post('/account/admin-access/verify', validateBody(adminPasscodeVer
     return res.status(400).json({ error: 'Admin passcode is not configured' });
   }
   const ok = safeEqualHex(hashAdminPasscode(passcode), adminAccess.passcodeHash);
-  if (!ok) return res.status(401).json({ error: 'Invalid admin passcode' });
+  if (!ok) return res.status(403).json({ error: 'Invalid admin passcode' });
   return res.json({ ok: true, unlocked: true });
 });
 
@@ -1161,7 +1161,7 @@ accountRouter.put('/account/admin-access/passcode', validateBody(adminPasscodeSe
       return res.status(400).json({ error: 'Current passcode is required' });
     }
     const currentOk = safeEqualHex(hashAdminPasscode(currentPasscode), adminAccess.passcodeHash);
-    if (!currentOk) return res.status(401).json({ error: 'Current passcode is invalid' });
+    if (!currentOk) return res.status(403).json({ error: 'Current passcode is invalid' });
   }
   adminAccess.passcodeHash = hashAdminPasscode(newPasscode);
   adminAccess.updatedAt = Date.now();
