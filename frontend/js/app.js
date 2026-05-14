@@ -19753,12 +19753,26 @@ function viewSettings(){
     }
 
     async function loadDevSettingsUI() {
+      if (!canAccessDeveloperTools()) {
+        applyDevSettingsUI({});
+        devBaseline = readDevSettingsFromUI();
+        syncDevDirtyState();
+        if (devSettingsStatus) devSettingsStatus.textContent = "Developer tools require superadmin access.";
+        return;
+      }
       try {
         const data = await apiGet("/api/dev/settings");
         applyDevSettingsUI(data?.settings || {});
         devBaseline = readDevSettingsFromUI();
         syncDevDirtyState();
       } catch (err) {
+        if (isApi404Error(err)) {
+          applyDevSettingsUI({});
+          devBaseline = readDevSettingsFromUI();
+          syncDevDirtyState();
+          if (devSettingsStatus) devSettingsStatus.textContent = "Developer tools are unavailable in production.";
+          return;
+        }
         console.error("Failed to load dev settings:", err);
         if (devSettingsStatus) devSettingsStatus.textContent = "Failed to load.";
       }
@@ -19775,6 +19789,10 @@ function viewSettings(){
     devSimulateOutbound?.addEventListener("change", syncDevDirtyState);
 
     devSettingsSaveBtn?.addEventListener("click", async () => {
+      if (!canAccessDeveloperTools()) {
+        if (devSettingsStatus) devSettingsStatus.textContent = "Developer tools require superadmin access.";
+        return;
+      }
       try {
         const patch = {
           enabled: devModeEnabled?.checked === true,
