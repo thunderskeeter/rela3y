@@ -363,6 +363,66 @@ function ensureDefaultSuperadminUser() {
   }
 }
 
+function isStrongBootstrapPassword(password) {
+  const value = String(password || '');
+  if (value.length < 12) return false;
+  if (!/[A-Z]/.test(value)) return false;
+  if (!/[a-z]/.test(value)) return false;
+  if (!/[0-9]/.test(value)) return false;
+  if (!/[^A-Za-z0-9]/.test(value)) return false;
+  return true;
+}
+
+function ensureBootstrapOwnerUser() {
+  const email = normalizeEmail(process.env.BOOTSTRAP_OWNER_EMAIL || '');
+  const password = String(process.env.BOOTSTRAP_OWNER_PASSWORD || '');
+  if (!email && !password) return;
+  if (!email || !password) {
+    throw new Error('BOOTSTRAP_OWNER_EMAIL and BOOTSTRAP_OWNER_PASSWORD must be set together');
+  }
+  if (!isStrongBootstrapPassword(password)) {
+    throw new Error('BOOTSTRAP_OWNER_PASSWORD must be 12+ chars with uppercase, lowercase, number, and symbol');
+  }
+
+  const data = ensureAuthCollections(loadData());
+  const to = String(process.env.BOOTSTRAP_OWNER_TO || '+18145550001').trim();
+  const accountId = String(process.env.BOOTSTRAP_OWNER_ACCOUNT_ID || `acct_${to.replace(/[^\d]/g, '') || 'bootstrap'}`).trim();
+  const accountRef = getAccountById(data, accountId);
+  let account = accountRef?.account || null;
+  if (!account) {
+    data.accounts = data.accounts && typeof data.accounts === 'object' ? data.accounts : {};
+    account = data.accounts[to] || { to };
+    data.accounts[to] = account;
+  }
+  account.to = account.to || to;
+  account.id = accountId;
+  account.accountId = accountId;
+  account.businessName = account.businessName || process.env.BOOTSTRAP_BUSINESS_NAME || 'Arc Relay';
+
+  const existing = data.users.find((u) => normalizeEmail(u?.email) === email);
+  if (existing) {
+    existing.passwordHash = hashPassword(password);
+    existing.role = 'owner';
+    existing.accountIds = Array.from(new Set([...(Array.isArray(existing.accountIds) ? existing.accountIds : []), accountId]));
+    existing.disabled = false;
+  } else {
+    data.users.push({
+      id: randomId(),
+      name: String(process.env.BOOTSTRAP_OWNER_NAME || 'Owner').trim(),
+      email,
+      passwordHash: hashPassword(password),
+      role: 'owner',
+      accountIds: [accountId],
+      createdAt: Date.now(),
+      lastLoginAt: null,
+      disabled: false
+    });
+  }
+  saveDataDebounced(data);
+  flushDataNow();
+  console.warn('[auth] bootstrap owner ensured from env; remove BOOTSTRAP_OWNER_* after first login.');
+}
+
 module.exports = {
   SESSION_COOKIE,
   CSRF_COOKIE,
@@ -390,5 +450,6 @@ module.exports = {
   clearSessionCookie,
   clearCsrfCookie,
   getAllowedAccountsForUser,
-  ensureDefaultSuperadminUser
+  ensureDefaultSuperadminUser,
+  ensureBootstrapOwnerUser
 };
