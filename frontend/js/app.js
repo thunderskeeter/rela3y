@@ -84,6 +84,10 @@ function canAccessDeveloperTools() {
   const role = String(authState?.user?.role || "").toLowerCase();
   return role === "superadmin" || role === "owner";
 }
+function canAccessDeveloperRoutes() {
+  const role = String(authState?.user?.role || "").toLowerCase();
+  return role === "superadmin";
+}
 function canAccessWorkspaceAdmin() {
   const role = String(authState?.user?.role || "").toLowerCase();
   return role === "superadmin" || role === "owner" || role === "admin";
@@ -5725,6 +5729,9 @@ function startConversationAnimation({
 }
 
 async function runDeveloperConversationSimulation() {
+  if (!canAccessDeveloperRoutes()) {
+    throw new Error("Conversation simulation is only available in developer mode.");
+  }
   const res = await apiPost("/api/dev/revenue/simulate", { scenario: "detailing_conversation" });
   if (res) {
     const tenantTo = String(res.to || getActiveTo() || "").trim();
@@ -8132,7 +8139,7 @@ function viewRevenue() {
 function viewMessages(){
   const wrap = document.createElement("div");
   wrap.className = "col app-view app-view-messages";
-  const showDevSimulatorQuickBtn = canAccessDeveloperTools();
+  const showDevSimulatorQuickBtn = canAccessDeveloperRoutes();
 
   const inbox = document.createElement("div");
   inbox.className = "inbox";
@@ -19779,7 +19786,7 @@ function viewSettings(){
     }
 
     async function loadDevSettingsUI() {
-      if (!canAccessDeveloperTools()) {
+      if (!canAccessDeveloperRoutes()) {
         applyDevSettingsUI({});
         devBaseline = readDevSettingsFromUI();
         syncDevDirtyState();
@@ -19815,7 +19822,7 @@ function viewSettings(){
     devSimulateOutbound?.addEventListener("change", syncDevDirtyState);
 
     devSettingsSaveBtn?.addEventListener("click", async () => {
-      if (!canAccessDeveloperTools()) {
+      if (!canAccessDeveloperRoutes()) {
         if (devSettingsStatus) devSettingsStatus.textContent = "Developer tools require superadmin access.";
         return;
       }
@@ -19840,6 +19847,10 @@ function viewSettings(){
     });
 
     simulateConversationBtn?.addEventListener("click", async () => {
+      if (!canAccessDeveloperRoutes()) {
+        if (simulateConversationStatus) simulateConversationStatus.textContent = "Conversation simulation is only available in developer mode.";
+        return;
+      }
       if (simulateConversationBtn) simulateConversationBtn.disabled = true;
       if (simulateConversationStatus) simulateConversationStatus.textContent = "Simulating conversation...";
       try {
