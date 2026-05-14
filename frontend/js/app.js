@@ -1625,6 +1625,7 @@ const CONVERSATION_CACHE_TTL_MS = 10 * 1000;
 const ACCOUNT_SETTINGS_CACHE_TTL_MS = 30 * 1000;
 const CONTACTS_CACHE_TTL_MS = 20 * 1000;
 const ANALYTICS_THREAD_HYDRATION_TTL_MS = 60 * 1000;
+const SIMULATED_CONVERSATIONS_STORAGE_PREFIX = "mc_simulated_conversations_v1";
 
 function cloneJsonSafe(value) {
   if (value == null) return value;
@@ -5404,6 +5405,7 @@ function rebuildRevenueLedgerFromThreads(threadsInput) {
   const rows = [];
   const now = Date.now();
   for (const thread of threads) {
+    if (isSimulatedConversationLike(thread)) continue;
     const status = String(thread?.status || "").toLowerCase();
     const stage = String(thread?.stage || "").toLowerCase();
     const ld = thread?.leadData || {};
@@ -5465,6 +5467,100 @@ function coerceTimestampMs(value, fallback = 0) {
   return Number.isFinite(fb) && fb > 0 ? fb : 0;
 }
 
+function simulatedConversationsStorageKey(to = getActiveTo()) {
+  return `${SIMULATED_CONVERSATIONS_STORAGE_PREFIX}:${String(to || "").trim()}`;
+}
+
+function isSimulatedConversationLike(item) {
+  if (!item || typeof item !== "object") return false;
+  if (item.isSimulated === true) return true;
+  if (String(item.source || "").toLowerCase() === "simulated") return true;
+  if (String(item.status || "").toLowerCase() === "simulated") return true;
+  if (String(item.stage || "").toLowerCase() === "simulated") return true;
+  return /^sim-/i.test(String(item.id || ""));
+}
+
+function sanitizeSimulatedMessages(messages) {
+  return (Array.isArray(messages) ? messages : []).map((message) => {
+    const next = {
+      ...message,
+      status: "simulated",
+      providerMeta: { ...(message?.providerMeta || {}), provider: "simulator" }
+    };
+    const meta = { ...(message?.meta || {}) };
+    const payload = { ...(message?.payload || {}) };
+    delete meta.bookingConfirmed;
+    delete meta.bookingTime;
+    delete meta.booking_time;
+    delete payload.bookingConfirmed;
+    delete payload.bookingTime;
+    delete payload.booking_time;
+    delete next.bookingTime;
+    delete next.booking_time;
+    next.meta = { ...meta, simulated: true };
+    next.payload = { ...payload, simulated: true };
+    return next;
+  });
+}
+
+function normalizeSimulatedConversation(item) {
+  if (!item || typeof item !== "object") return null;
+  const id = String(item.id || "").trim();
+  if (!id) return null;
+  const messages = sanitizeSimulatedMessages(item.messages);
+  const leadData = item.leadData && typeof item.leadData === "object" ? { ...item.leadData } : {};
+  delete leadData.booking_time;
+  delete leadData.bookingTime;
+  delete leadData.payment_status;
+  delete leadData.paymentStatus;
+  return {
+    ...item,
+    id,
+    source: "simulated",
+    isSimulated: true,
+    stage: "simulated",
+    status: "simulated",
+    bookingTime: null,
+    bookedAt: null,
+    paymentStatus: null,
+    payment_status: null,
+    leadData,
+    messages,
+    lastText: String(item.lastText || messages[messages.length - 1]?.text || messages[messages.length - 1]?.body || "Simulated conversation"),
+    updatedAt: Number(item.updatedAt || Date.now()),
+    lastActivityAt: Number(item.lastActivityAt || item.updatedAt || Date.now())
+  };
+}
+
+function loadSimulatedConversations(to = getActiveTo()) {
+  const rows = loadLS(simulatedConversationsStorageKey(to), []);
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeSimulatedConversation).filter(Boolean);
+}
+
+function saveSimulatedConversation(to, conversation) {
+  const normalized = normalizeSimulatedConversation(conversation);
+  if (!normalized) return null;
+  const existing = loadSimulatedConversations(to);
+  const next = [normalized, ...existing.filter((row) => String(row?.id || "") !== normalized.id)].slice(0, 25);
+  saveLS(simulatedConversationsStorageKey(to), next);
+  return normalized;
+}
+
+function findSimulatedConversation(convoId, to = getActiveTo()) {
+  const id = String(convoId || "").trim();
+  if (!id) return null;
+  return loadSimulatedConversations(to).find((row) => String(row?.id || "") === id) || null;
+}
+
+function mergeSimulatedConversations(threads, to = getActiveTo()) {
+  const base = Array.isArray(threads) ? threads : [];
+  const simulated = loadSimulatedConversations(to);
+  if (!simulated.length) return base;
+  const simulatedIds = new Set(simulated.map((row) => String(row?.id || "")));
+  return [...simulated, ...base.filter((row) => !simulatedIds.has(String(row?.id || "")))];
+}
+
 async function ensureRecoveredTotalForConversation(convo, options = {}) {
   const force = options?.force === true;
   const from = String(convo?.from || "").trim();
@@ -5510,6 +5606,7 @@ function getLatestBookedConfirmationTime(convo) {
 
 function applyRealtimeBookedState(convo, options = {}) {
   if (!convo || typeof convo !== "object") return false;
+  if (isSimulatedConversationLike(convo)) return false;
   const refreshRecovered = options?.refreshRecovered === true;
   const bookedMs = getLatestBookedConfirmationTime(convo);
   if (!Number.isFinite(bookedMs) || bookedMs <= 0) return false;
@@ -5623,11 +5720,7 @@ function startConversationAnimation({
       providerMeta: { provider: "simulator" }
     };
   });
-  const simulatedBooked = simulatedMessages.some((m) => {
-    const bookingConfirmed = Boolean(m?.meta?.bookingConfirmed || m?.payload?.bookingConfirmed);
-    const bookingTime = Number(m?.meta?.bookingTime || m?.payload?.bookingTime || m?.bookingTime || 0);
-    return bookingConfirmed || (Number.isFinite(bookingTime) && bookingTime > 0);
-  });
+  const safeSimulatedMessages = sanitizeSimulatedMessages(simulatedMessages);
   const bookingMs = Number(bookingTime || 0);
   const serviceName = String(service || "").trim();
   const extraName = String(extra || "").trim();
@@ -5638,7 +5731,7 @@ function startConversationAnimation({
     : "";
   const requestText = servicesList.length ? servicesList.join(" + ") : (serviceName || "");
   const leadData = {
-    intent: serviceName || (simulatedBooked ? "booked_appointment" : "inquiry"),
+    intent: serviceName || "inquiry",
     request: requestText,
     service_required: requestText,
     services_list: servicesList,
@@ -5650,10 +5743,12 @@ function startConversationAnimation({
     id: convoId,
     from,
     to: tenantTo,
-    messages: simulatedMessages,
-    stage: simulatedBooked ? "booked" : "simulated",
-    status: simulatedBooked ? "booked" : "new",
-    bookingTime: Number.isFinite(bookingMs) && bookingMs > 0 ? bookingMs : null,
+    messages: safeSimulatedMessages,
+    source: "simulated",
+    isSimulated: true,
+    stage: "simulated",
+    status: "simulated",
+    bookingTime: null,
     amount: Number.isFinite(Number(price || 0)) && Number(price) > 0 ? Number(price) : null,
     leadData
   };
@@ -5663,59 +5758,38 @@ function startConversationAnimation({
   state.simulationBlockConversationLoad = true;
   state.simulationConversationId = convoId;
   state.threadsLastLoadedAt = Date.now();
-  state.conversationCacheById[getConversationCacheKey(convoId, tenantTo)] = {
-    loadedAt: Date.now(),
-    data: cloneJsonSafe(state.activeConversation)
-  };
   const simulatedThread = {
     id: convoId,
     from,
     name: from,
     phone: from,
-    stage: simulatedBooked ? "booked" : "simulated",
-    status: simulatedBooked ? "booked" : "new",
-    bookingTime: Number.isFinite(bookingMs) && bookingMs > 0 ? bookingMs : null,
+    source: "simulated",
+    isSimulated: true,
+    stage: "simulated",
+    status: "simulated",
+    bookingTime: null,
     amount: Number.isFinite(Number(price || 0)) && Number(price) > 0 ? Number(price) : null,
     leadData,
-    lastText: simulatedMessages[simulatedMessages.length - 1]?.text || "Simulated conversation",
-    messages: simulatedMessages
+    lastText: safeSimulatedMessages[safeSimulatedMessages.length - 1]?.text || "Simulated conversation",
+    messages: safeSimulatedMessages,
+    updatedAt: Date.now(),
+    lastActivityAt: Date.now()
   };
-  state.threads = [simulatedThread, ...state.threads.filter((t) => t.id !== convoId)];
+  const persistedSimulatedThread = saveSimulatedConversation(tenantTo, simulatedThread) || simulatedThread;
+  state.activeConversation = {
+    ...state.activeConversation,
+    ...persistedSimulatedThread,
+    to: tenantTo,
+    messages: safeSimulatedMessages,
+    leadData
+  };
+  state.conversationCacheById[getConversationCacheKey(convoId, tenantTo)] = {
+    loadedAt: Date.now(),
+    data: cloneJsonSafe(state.activeConversation)
+  };
+  state.threads = [persistedSimulatedThread, ...state.threads.filter((t) => t.id !== convoId)];
+  try { localStorage.removeItem(`mc_schedule_sim_bookings_v1:${tenantTo}`); } catch {}
   rebuildRevenueLedgerFromThreads(state.threads);
-  if (simulatedBooked && Number.isFinite(bookingMs) && bookingMs > 0) {
-    const simulatedBookingsKey = `mc_schedule_sim_bookings_v1:${tenantTo}`;
-    const simStart = new Date(bookingMs);
-    const simEnd = new Date(simStart.getTime() + (60 * 60 * 1000));
-    const simulatedJobType = servicesList.length
-      ? servicesList.join(" and ")
-      : (serviceName || "Appointment");
-    const simulatedVehicle = normalizeBookedVehicleValue(detailText);
-    const simEvent = {
-      id: `sim-booking-${convoId}`,
-      title: `Booked: ${String(from || "Simulated lead")}`,
-      start: simStart.getTime(),
-      end: simEnd.getTime(),
-      allDay: false,
-      color: "#7f1d1d",
-      calendar: "Booked",
-      meta: {
-        source: "simulated",
-        threadId: convoId,
-        jobType: simulatedJobType,
-        phone: String(from || "").trim() || undefined,
-        service: serviceName || undefined,
-        serviceRequired: String(requestText || "").trim() || undefined,
-        vehicle: simulatedVehicle || undefined,
-        agreedPrice: Number.isFinite(Number(price || 0)) && Number(price) > 0 ? Number(price) : undefined,
-        addOns: []
-      }
-    };
-    const existing = Array.isArray(loadLS(simulatedBookingsKey, [])) ? loadLS(simulatedBookingsKey, []) : [];
-    const deduped = existing.filter((row) => String(row?.id || "") !== simEvent.id);
-    deduped.push(simEvent);
-    saveLS(simulatedBookingsKey, deduped.slice(-300));
-    state.scheduleFocusDate = bookingMs;
-  }
   const hasMountedMessagesView = Boolean(document.getElementById("threadList") && document.getElementById("chatHead") && document.getElementById("bubbles"));
   if (hasMountedMessagesView) {
     renderThreadListFromAPI("").catch((err) => console.error("simulation thread paint failed:", err));
@@ -10755,6 +10829,7 @@ function viewSchedule() {
 
     const threads = Array.isArray(state?.threads) ? state.threads : [];
     for (const thread of threads) {
+      if (isSimulatedConversationLike(thread)) continue;
       const status = String(thread?.status || "").toLowerCase();
       const stage = String(thread?.stage || "").toLowerCase();
       const ld = thread?.leadData || {};
@@ -10828,10 +10903,6 @@ function viewSchedule() {
     for (const event of loadStoredEvents(customEventsKey)) {
       pushEvent(event);
     }
-    for (const event of loadStoredEvents(simulatedBookingsKey)) {
-      pushEvent(event);
-    }
-
     return result;
   }
 
@@ -20783,7 +20854,7 @@ async function loadThreads(options = {}){
   const cacheEntry = state.threadListCacheByTo?.[to] || null;
   if (!force && cacheEntry && (Date.now() - Number(cacheEntry.loadedAt || 0)) < THREADS_CACHE_TTL_MS) {
     if (isUiScopeCurrent(scopeSnapshot)) {
-      state.threads = cloneJsonSafe(cacheEntry.data || []);
+      state.threads = mergeSimulatedConversations(cloneJsonSafe(cacheEntry.data || []), to);
       state.threadsLastLoadedAt = Number(cacheEntry.loadedAt || Date.now());
     }
   } else if (!force && state.threadListPromiseByTo?.[to]) {
@@ -20794,7 +20865,7 @@ async function loadThreads(options = {}){
         const conversations = Array.isArray(data?.conversations) ? data.conversations : [];
         state.threadListCacheByTo[to] = { loadedAt: Date.now(), data: cloneJsonSafe(conversations) };
         if (isUiScopeCurrent(scopeSnapshot)) {
-          state.threads = cloneJsonSafe(conversations);
+          state.threads = mergeSimulatedConversations(cloneJsonSafe(conversations), to);
           state.threadsLastLoadedAt = Date.now();
           state.recentLeadsCache = {};
           state.recentActivityCache = {};
@@ -20805,6 +20876,9 @@ async function loadThreads(options = {}){
       });
     state.threadListPromiseByTo[to] = loadPromise;
     await loadPromise;
+  }
+  if (isUiScopeCurrent(scopeSnapshot)) {
+    state.threads = mergeSimulatedConversations(state.threads, to);
   }
 
   if (isUiScopeCurrent(scopeSnapshot) && !state.activeThreadId && state.threads.length){
@@ -20850,6 +20924,15 @@ async function loadConversation(convoId, options = {}){
       rebuildRevenueLedgerFromThreads(state.threads);
     }
     return nextConversation;
+  }
+  const simulatedConversation = findSimulatedConversation(requestedId, requestedTo);
+  if (simulatedConversation) {
+    state.conversationCacheById[cacheKey] = { loadedAt: Date.now(), data: cloneJsonSafe(simulatedConversation) };
+    if (isUiScopeCurrent(scopeSnapshot, { activeThreadId: requestedId })) {
+      state.activeConversation = cloneJsonSafe(simulatedConversation);
+      rebuildRevenueLedgerFromThreads(state.threads);
+    }
+    return cloneJsonSafe(simulatedConversation);
   }
   const cacheEntry = state.conversationCacheById?.[cacheKey] || null;
   if (!force && cacheEntry && (Date.now() - Number(cacheEntry.loadedAt || 0)) < CONVERSATION_CACHE_TTL_MS) {
