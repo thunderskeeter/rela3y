@@ -29,6 +29,7 @@ const replaySchema = z.object({
 const noBodySchema = z.object({}).strict().optional().default({});
 
 devRouter.use((req, res, next) => {
+  if (!String(req?.path || '').startsWith('/dev')) return next();
   if (DEV_MODE !== true) return res.status(404).json({ error: 'Not found' });
   const role = String(req?.user?.role || '').toLowerCase();
   if (role !== 'superadmin') return res.status(403).json({ error: 'Forbidden' });
