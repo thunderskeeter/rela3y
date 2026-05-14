@@ -425,7 +425,8 @@ async function mutateFlowConversation({ tenant, to, from, requireExisting = fals
 }
 
 async function recordSimulatedConversation({ tenant, to, from, messages = [], leadData = {}, amount = null }) {
-  const accountId = String(tenant?.accountId || '');
+  const { accountIdFromTo } = require('../store/dataStore');
+  const accountId = String(tenant?.accountId || tenant?.account?.accountId || tenant?.account?.id || accountIdFromTo(to));
   const convoKey = buildConvoKey(to, from);
   const now = Date.now();
   const safeMessages = (Array.isArray(messages) ? messages : []).map(stripBookingSignalsFromSimulatedMessage);
