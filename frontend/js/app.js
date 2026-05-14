@@ -5551,14 +5551,15 @@ function saveSimulatedRowsToStorage(storage, key, rows) {
   } catch {}
 }
 
-function dedupeSimulatedConversations(rows, to = getActiveTo()) {
+function dedupeSimulatedConversations(rows, to = getActiveTo(), options = {}) {
   const scopedTo = String(to || "").trim();
+  const requireScopeMatch = options.requireScopeMatch !== false;
   const out = [];
   const seen = new Set();
   for (const row of rows) {
     const normalized = normalizeSimulatedConversation(row);
     if (!normalized) continue;
-    if (normalized.to && scopedTo && normalized.to !== scopedTo) continue;
+    if (requireScopeMatch && normalized.to && scopedTo && normalized.to !== scopedTo) continue;
     if (seen.has(normalized.id)) continue;
     seen.add(normalized.id);
     out.push(normalized);
@@ -5569,12 +5570,14 @@ function dedupeSimulatedConversations(rows, to = getActiveTo()) {
 function loadSimulatedConversations(to = getActiveTo()) {
   const scopedKey = simulatedConversationsStorageKey(to);
   const globalKey = simulatedConversationsStorageKey(SIMULATED_CONVERSATIONS_GLOBAL_SCOPE);
-  return dedupeSimulatedConversations([
+  const rows = [
     ...loadSimulatedRowsFromStorage(localStorage, scopedKey),
     ...loadSimulatedRowsFromStorage(localStorage, globalKey),
     ...loadSimulatedRowsFromStorage(sessionStorage, scopedKey),
     ...loadSimulatedRowsFromStorage(sessionStorage, globalKey)
-  ], to);
+  ];
+  const scoped = dedupeSimulatedConversations(rows, to, { requireScopeMatch: true });
+  return scoped.length ? scoped : dedupeSimulatedConversations(rows, to, { requireScopeMatch: false });
 }
 
 function saveSimulatedConversation(to, conversation) {
