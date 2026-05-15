@@ -9697,6 +9697,20 @@ select.select{
     min-width:0;
   }
 
+  .mc-toolbar-right{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:8px;
+  }
+
+  .mc-toolbar-right .mc-search,
+  .mc-toolbar-right .mc-toolbar-btn,
+  .mc-import-help-btn{
+    width:100%;
+    margin-left:0;
+    justify-content:center;
+  }
+
   .mc-nav-pair{
     display:grid;
     grid-template-columns:repeat(3, minmax(0, 1fr));
