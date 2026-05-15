@@ -7,7 +7,7 @@ const { optimizeOutcomePacks } = require('../services/optimizationService');
 const { startRun, replayRun } = require('../services/agentEngine');
 const { recordSimulatedConversation } = require('../services/conversationsService');
 const { z, validateBody } = require('../utils/validate');
-const { DEV_MODE } = require('../config/runtime');
+const { DEV_MODE, APP_PUBLIC_BASE_URL } = require('../config/runtime');
 const { hasDeveloperAccess } = require('../utils/auth');
 
 const devRouter = express.Router();
@@ -28,6 +28,11 @@ const replaySchema = z.object({
   runId: z.string().trim().min(1).max(128),
   dryRun: z.boolean().optional()
 }).strict();
+const platformStripeConnectSchema = z.object({
+  secretKey: z.string().trim().max(256).optional().default(''),
+  publishableKey: z.string().trim().max(256).optional().default(''),
+  webhookSecret: z.string().trim().max(256).optional().default('')
+});
 const noBodySchema = z.object({}).strict().optional().default({});
 
 devRouter.use((req, res, next) => {
@@ -50,6 +55,195 @@ devRouter.use((req, res, next) => {
 devRouter.get('/dev/settings', (_req, res) => {
   const settings = getDevSettings();
   res.json({ settings });
+});
+
+function maskSecret(value, { left = 6, right = 4 } = {}) {
+  const v = String(value || '').trim();
+  if (!v) return '';
+  if (v.length <= left + right) return `${v.slice(0, 2)}***`;
+  return `${v.slice(0, left)}...${v.slice(-right)}`;
+}
+
+function ensurePlatformStripeConfig(data) {
+  data.dev = data.dev && typeof data.dev === 'object' ? data.dev : {};
+  const current = data.dev.platformBillingStripe && typeof data.dev.platformBillingStripe === 'object'
+    ? data.dev.platformBillingStripe
+    : {};
+  data.dev.platformBillingStripe = {
+    enabled: current.enabled === true,
+    secretKey: String(current.secretKey || '').trim(),
+    publishableKey: String(current.publishableKey || '').trim(),
+    webhookSecret: String(current.webhookSecret || '').trim(),
+    accountId: String(current.accountId || '').trim(),
+    accountEmail: String(current.accountEmail || '').trim(),
+    accountDisplayName: String(current.accountDisplayName || '').trim(),
+    connectedAt: current.connectedAt ? Number(current.connectedAt) : null,
+    lastTestedAt: current.lastTestedAt ? Number(current.lastTestedAt) : null,
+    lastStatus: current.lastStatus ? String(current.lastStatus) : null,
+    lastError: current.lastError ? String(current.lastError) : null
+  };
+  return data.dev.platformBillingStripe;
+}
+
+function platformStripeSnapshot(cfg) {
+  const current = cfg && typeof cfg === 'object' ? cfg : {};
+  const base = String(APP_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  return {
+    enabled: current.enabled === true,
+    accountId: String(current.accountId || ''),
+    accountEmail: String(current.accountEmail || ''),
+    accountDisplayName: String(current.accountDisplayName || ''),
+    publishableKey: String(current.publishableKey || ''),
+    webhookSecretMasked: current.webhookSecret ? maskSecret(current.webhookSecret) : '',
+    webhookUrl: base ? `${base}/webhooks/stripe/platform` : '/webhooks/stripe/platform',
+    secretKeyMasked: current.secretKey ? maskSecret(current.secretKey) : '',
+    connectedAt: current.connectedAt ? Number(current.connectedAt) : null,
+    lastTestedAt: current.lastTestedAt ? Number(current.lastTestedAt) : null,
+    lastStatus: current.lastStatus ? String(current.lastStatus) : null,
+    lastError: current.lastError ? String(current.lastError) : null
+  };
+}
+
+function stripeAuthHeader(secretKey) {
+  const token = Buffer.from(`${String(secretKey || '').trim()}:`, 'utf8').toString('base64');
+  return `Basic ${token}`;
+}
+
+async function stripeRequest(secretKey, path, { method = 'GET', form = null } = {}) {
+  const headers = {
+    Authorization: stripeAuthHeader(secretKey),
+    Accept: 'application/json'
+  };
+  let body;
+  if (form && typeof form === 'object') {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(form)) {
+      if (value == null) continue;
+      params.set(String(key), String(value));
+    }
+    body = params.toString();
+    headers['Content-Type'] = 'application/x-www-form-urlencoded';
+  }
+  const response = await fetch(`https://api.stripe.com${path}`, { method, headers, body });
+  const raw = await response.text();
+  let parsed = {};
+  try { parsed = JSON.parse(raw); } catch {}
+  if (!response.ok) {
+    const detail = String(parsed?.error?.message || parsed?.message || '').trim();
+    throw new Error(detail || `Stripe request failed (${response.status})`);
+  }
+  return parsed;
+}
+
+async function testStripeCredentials(secretKey) {
+  const account = await stripeRequest(secretKey, '/v1/account');
+  return {
+    accountId: String(account?.id || '').trim(),
+    accountEmail: String(account?.email || '').trim(),
+    accountDisplayName: String(account?.business_profile?.name || account?.settings?.dashboard?.display_name || '').trim()
+  };
+}
+
+devRouter.get('/dev/platform-billing/stripe', (_req, res) => {
+  const data = loadData();
+  const cfg = ensurePlatformStripeConfig(data);
+  saveDataDebounced(data);
+  return res.json({ ok: true, stripe: platformStripeSnapshot(cfg) });
+});
+
+devRouter.put('/dev/platform-billing/stripe', validateBody(platformStripeConnectSchema), async (req, res) => {
+  const data = loadData();
+  const cfg = ensurePlatformStripeConfig(data);
+  const secretKey = String(req.body?.secretKey || '').trim() || String(cfg.secretKey || '').trim();
+  const publishableKey = String(req.body?.publishableKey || '').trim();
+  const webhookSecret = String(req.body?.webhookSecret || '').trim() || String(cfg.webhookSecret || '').trim();
+  if (!secretKey) return res.status(400).json({ error: 'secretKey is required' });
+
+  try {
+    const tested = await testStripeCredentials(secretKey);
+    data.dev.platformBillingStripe = {
+      ...cfg,
+      enabled: true,
+      secretKey,
+      publishableKey,
+      webhookSecret,
+      accountId: tested.accountId || cfg.accountId || '',
+      accountEmail: tested.accountEmail || cfg.accountEmail || '',
+      accountDisplayName: tested.accountDisplayName || cfg.accountDisplayName || '',
+      connectedAt: cfg.connectedAt || Date.now(),
+      lastTestedAt: Date.now(),
+      lastStatus: 'ok',
+      lastError: null
+    };
+    saveDataDebounced(data);
+    return res.json({ ok: true, stripe: platformStripeSnapshot(data.dev.platformBillingStripe) });
+  } catch (err) {
+    data.dev.platformBillingStripe = {
+      ...cfg,
+      enabled: false,
+      secretKey,
+      publishableKey,
+      webhookSecret,
+      lastTestedAt: Date.now(),
+      lastStatus: 'error',
+      lastError: String(err?.message || 'Stripe authentication failed')
+    };
+    saveDataDebounced(data);
+    return res.status(400).json({ error: err?.message || 'Failed to connect platform Stripe' });
+  }
+});
+
+devRouter.post('/dev/platform-billing/stripe/test', validateBody(noBodySchema), async (_req, res) => {
+  const data = loadData();
+  const cfg = ensurePlatformStripeConfig(data);
+  const secretKey = String(cfg.secretKey || '').trim();
+  if (!secretKey) return res.status(400).json({ error: 'Platform Stripe secret key is not configured' });
+  try {
+    const tested = await testStripeCredentials(secretKey);
+    data.dev.platformBillingStripe = {
+      ...cfg,
+      enabled: true,
+      accountId: tested.accountId || cfg.accountId || '',
+      accountEmail: tested.accountEmail || cfg.accountEmail || '',
+      accountDisplayName: tested.accountDisplayName || cfg.accountDisplayName || '',
+      lastTestedAt: Date.now(),
+      lastStatus: 'ok',
+      lastError: null
+    };
+    saveDataDebounced(data);
+    return res.json({ ok: true, accountId: tested.accountId || '', stripe: platformStripeSnapshot(data.dev.platformBillingStripe) });
+  } catch (err) {
+    data.dev.platformBillingStripe = {
+      ...cfg,
+      enabled: false,
+      lastTestedAt: Date.now(),
+      lastStatus: 'error',
+      lastError: String(err?.message || 'Stripe test failed')
+    };
+    saveDataDebounced(data);
+    return res.status(400).json({ error: err?.message || 'Stripe test failed' });
+  }
+});
+
+devRouter.delete('/dev/platform-billing/stripe', validateBody(noBodySchema), (_req, res) => {
+  const data = loadData();
+  const cfg = ensurePlatformStripeConfig(data);
+  data.dev.platformBillingStripe = {
+    ...cfg,
+    enabled: false,
+    secretKey: '',
+    publishableKey: '',
+    webhookSecret: '',
+    accountId: '',
+    accountEmail: '',
+    accountDisplayName: '',
+    connectedAt: null,
+    lastTestedAt: Date.now(),
+    lastStatus: 'disconnected',
+    lastError: null
+  };
+  saveDataDebounced(data);
+  return res.json({ ok: true, stripe: platformStripeSnapshot(data.dev.platformBillingStripe) });
 });
 
 devRouter.patch('/dev/settings', validateBody(settingsPatchSchema), (req, res) => {

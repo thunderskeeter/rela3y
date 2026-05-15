@@ -20164,7 +20164,7 @@ function viewSettings(){
     async function refreshSuperadminPlatformStripe() {
       if (String(authState?.user?.role || "").toLowerCase() !== "superadmin") return;
       try {
-        const res = await apiGet("/api/admin/developer/platform-billing/stripe");
+        const res = await apiGet("/api/dev/platform-billing/stripe");
         renderSuperadminPlatformStripe(res?.stripe || {});
       } catch (err) {
         if (superadminPlatformStripeActionStatus) {
@@ -20480,7 +20480,7 @@ function viewSettings(){
         return;
       }
       try {
-        await apiPut("/api/admin/developer/platform-billing/stripe", payload);
+        await apiPut("/api/dev/platform-billing/stripe", payload);
         if (superadminPlatformStripeActionStatus) superadminPlatformStripeActionStatus.textContent = "Platform Stripe saved.";
         showSettingsToast("Platform Stripe saved");
         await refreshSuperadminPlatformStripe();
@@ -20492,7 +20492,7 @@ function viewSettings(){
 
     superadminPlatformStripeTestBtn?.addEventListener("click", async () => {
       try {
-        const result = await apiPost("/api/admin/developer/platform-billing/stripe/test", {});
+        const result = await apiPost("/api/dev/platform-billing/stripe/test", {});
         if (superadminPlatformStripeActionStatus) {
           superadminPlatformStripeActionStatus.textContent = `Platform Stripe test passed (${result?.accountId || "ok"})`;
         }
@@ -20506,7 +20506,7 @@ function viewSettings(){
 
     superadminPlatformStripeDisconnectBtn?.addEventListener("click", async () => {
       try {
-        await apiDelete("/api/admin/developer/platform-billing/stripe");
+        await apiDelete("/api/dev/platform-billing/stripe");
         if (superadminPlatformStripeActionStatus) superadminPlatformStripeActionStatus.textContent = "Platform Stripe disconnected.";
         showSettingsToast("Platform Stripe disconnected");
         await refreshSuperadminPlatformStripe();
