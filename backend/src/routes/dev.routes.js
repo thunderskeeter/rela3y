@@ -373,28 +373,35 @@ devRouter.put('/dev/platform-twilio', validateBody(platformTwilioConnectSchema),
     lastStatus: 'ok',
     lastError: null
   };
+  data.dev.platformTwilio = next;
+  saveDataDebounced(data);
+  await flushDataNow();
+
   try {
-    await listTwilioIncomingNumbers(next);
+    const numbers = await listTwilioIncomingNumbers(next);
+    next.lastStatus = 'ok';
+    next.lastError = null;
+    next.lastTestedAt = Date.now();
     data.dev.platformTwilio = next;
     saveDataDebounced(data);
     await flushDataNow();
-    return res.json({ ok: true, twilio: platformTwilioSnapshot(next) });
+    return res.json({
+      ok: true,
+      twilio: platformTwilioSnapshot(next),
+      summary: { twilioNumberCount: Array.isArray(numbers) ? numbers.length : 0 }
+    });
   } catch (err) {
-    if (cfg.enabled === true && cfg.accountSid && cfg.apiKeySid && cfg.apiKeySecret) {
-      cfg.lastTestedAt = Date.now();
-      cfg.lastError = String(err?.message || 'Twilio authentication failed');
-      data.dev.platformTwilio = cfg;
-    } else {
-      data.dev.platformTwilio = {
-        ...next,
-        enabled: false,
-        lastStatus: 'error',
-        lastError: String(err?.message || 'Twilio authentication failed')
-      };
-    }
+    next.lastTestedAt = Date.now();
+    next.lastStatus = 'saved';
+    next.lastError = String(err?.message || 'Twilio inventory check failed');
+    data.dev.platformTwilio = next;
     saveDataDebounced(data);
     await flushDataNow();
-    return res.status(400).json({ error: err?.message || 'Failed to connect Twilio' });
+    return res.json({
+      ok: true,
+      warning: err?.message || 'Twilio credentials were saved, but inventory could not be loaded yet',
+      twilio: platformTwilioSnapshot(next)
+    });
   }
 });
 

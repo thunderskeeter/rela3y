@@ -20872,8 +20872,8 @@ function viewSettings(){
           ...platformTwilioState,
           twilio: saved?.twilio || platformTwilioState.twilio || {}
         });
-        if (platformTwilioConnectStatus) platformTwilioConnectStatus.textContent = "Twilio connected.";
-        showSettingsToast("Twilio connected");
+        if (platformTwilioConnectStatus) platformTwilioConnectStatus.textContent = saved?.warning || "Twilio connected.";
+        showSettingsToast(saved?.warning ? "Twilio saved; inventory check pending" : "Twilio connected");
         platformTwilioConnectCard?.classList.add("hidden");
         await refreshPlatformTwilioInventory();
       } catch (err) {
