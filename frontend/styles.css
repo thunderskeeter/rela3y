@@ -9056,11 +9056,74 @@ code{
 .table-wrap,
 .settings-table-wrap,
 .billing-table-wrap,
-.home-neo-table-wrap{
+.team-table-wrap,
+.ops-table-wrap,
+.revenue-table-wrap,
+.home-neo-table-wrap,
+.platform-users-table-wrap,
+.platform-phone-table-wrap{
   width:100%;
   max-width:100%;
   overflow-x:auto;
   -webkit-overflow-scrolling:touch;
+  overscroll-behavior-inline:contain;
+  scrollbar-gutter:stable both-edges;
+}
+
+button,
+.btn,
+.input,
+textarea.input,
+select,
+select.select,
+.arc-dock-btn,
+.topbar-icon-btn,
+.topbar-search-trigger,
+.topbar-user-summary{
+  min-height:44px;
+}
+
+.btn,
+.input,
+textarea.input,
+select,
+select.select{
+  max-width:100%;
+}
+
+.settings-surface-card,
+.settings-panel,
+.developer-admin-card,
+.billing-card,
+.analytics-card,
+.analytics-kpi,
+.home-neo-kpi,
+.home-neo-panel,
+.contacts-shell,
+.platform-twilio-connect-card{
+  min-width:0;
+}
+
+.platform-users-table,
+.platform-phone-table,
+.team-table,
+.billing-table,
+.ops-table,
+.revenue-table{
+  min-width:680px;
+}
+
+.platform-phone-table .select{
+  max-width:100%;
+}
+
+.settings-modal,
+.team-modal,
+.billing-modal,
+.command-palette-modal{
+  max-width:calc(100vw - 24px);
+  max-height:calc(100dvh - 24px);
+  overflow:auto;
 }
 
 @media (max-width: 1180px){
@@ -9353,9 +9416,9 @@ code{
   .topbar-search-trigger,
   .topbar-icon-btn,
   .topbar-user-summary{
-    width:36px;
-    min-width:36px;
-    height:36px;
+    width:44px;
+    min-width:44px;
+    height:44px;
   }
 
   .topbar-user-dropdown,
@@ -9381,17 +9444,29 @@ code{
   }
 
   .arc-dock-tray{
+    display:grid;
+    grid-template-columns:repeat(6, minmax(0, 1fr));
     width:100%;
     max-width:100%;
-    gap:6px;
-    padding:7px;
+    gap:4px;
+    padding:6px;
     border-radius:16px;
   }
 
   .arc-dock-btn{
-    min-width:64px;
+    min-width:0;
+    width:100%;
+    min-height:54px;
     height:54px;
-    padding:5px 8px;
+    padding:5px 4px;
+    overflow:hidden;
+  }
+
+  .arc-dock-btn span:last-child{
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
   }
 
   .h1{
@@ -9466,7 +9541,7 @@ code{
   }
 
   .arc-dock-btn{
-    min-width:58px;
+    min-width:0;
     font-size:10px;
   }
 
@@ -9486,5 +9561,176 @@ code{
 
   .messages-mode .panel.chat{
     height:64dvh;
+  }
+}
+
+/* =========================
+   Mobile Usability Hardening
+   ========================= */
+@media (max-width: 900px){
+  .schedule-mode #content.content{
+    overflow:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+
+  .schedule-page{
+    height:auto;
+    min-height:0;
+    overflow:visible;
+  }
+
+  .schedule-header,
+  .sch-cal-header,
+  .sch-sidebar-header,
+  .analytics-header,
+  .contacts-toolbar,
+  .contacts-toolbar-main,
+  .billing-card-foot,
+  .platform-users-tabs,
+  .settings-action-zone{
+    flex-wrap:wrap;
+    gap:10px;
+  }
+
+  .schedule-header > *,
+  .analytics-header > *,
+  .contacts-toolbar > *,
+  .contacts-toolbar-main > *,
+  .billing-card-foot > *,
+  .settings-action-zone > *{
+    min-width:0;
+  }
+
+  .sch-sidebar{
+    position:static;
+  }
+
+  .sch-grid,
+  .mc-month-view,
+  .mc-week-view,
+  .mc-year-view{
+    max-width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+
+  .mc-toolbar-btn,
+  .mc-mini-nav-btn,
+  .sch-nav-btn,
+  .ui-segmented-control .btn,
+  .analytics-controls .btn-group .btn,
+  .platform-users-tabs .btn,
+  .billing-cadence-toggle .btn,
+  .lead-status-actions .btn,
+  .auto-card-actions .btn{
+    min-height:44px;
+  }
+
+  .settings-modal,
+  .team-modal,
+  .billing-modal,
+  .command-palette-modal{
+    width:100%;
+    max-width:calc(100vw - 20px);
+    max-height:calc(100dvh - 20px);
+    overflow:auto;
+  }
+}
+
+@media (max-width: 640px){
+  .app{
+    overflow:hidden;
+  }
+
+  .content{
+    width:100%;
+    max-width:100vw;
+  }
+
+  .row{
+    width:100%;
+  }
+
+  .row > .field,
+  .row > label,
+  .row > .btn,
+  .settings-action-zone .btn,
+  .billing-card-foot .btn,
+  .team-modal .btn,
+  .billing-modal .btn{
+    flex:1 1 100%;
+  }
+
+  .platform-users-table-wrap,
+  .platform-phone-table-wrap,
+  .team-table-wrap,
+  .billing-table-wrap,
+  .ops-table-wrap,
+  .revenue-table-wrap,
+  .home-neo-table-wrap{
+    border-radius:14px;
+  }
+
+  .platform-phone-table .select{
+    min-width:180px;
+  }
+
+  .home-neo-table,
+  .platform-users-table,
+  .platform-phone-table,
+  .team-table,
+  .billing-table,
+  .ops-table,
+  .revenue-table{
+    min-width:640px;
+  }
+
+  .mc-month-grid{
+    min-width:560px;
+  }
+
+  .mc-toolbar-left,
+  .mc-toolbar-center,
+  .mc-toolbar-right,
+  .mc-nav-pair,
+  .mc-segmented{
+    min-width:0;
+  }
+
+  .mc-nav-pair{
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0, 1fr));
+    gap:6px;
+  }
+
+  .auth-form .row{
+    padding:0;
+  }
+
+  .topbar-user-dropdown .btn,
+  .topbar-notif-head .btn{
+    min-height:44px;
+  }
+}
+
+@media (max-width: 380px){
+  .arc-dock{
+    width:calc(100vw - 8px);
+  }
+
+  .arc-dock-tray{
+    gap:3px;
+    padding:5px;
+  }
+
+  .arc-dock-btn{
+    font-size:9px;
+    padding-inline:2px;
+  }
+
+  .arc-dock-btn .ico,
+  .arc-dock-btn .ico svg{
+    width:17px;
+    height:17px;
   }
 }
