@@ -21022,6 +21022,7 @@ function viewSettings(){
     const simOut = document.getElementById("simOut");
     const simSendBtn = document.getElementById("simSend");
     populateAllowedAccountOptions();
+    const simulatorEnabled = Boolean(simType && bodyWrap && simOut && simSendBtn);
 
     function isValidSimulatorCustomTo(value) {
       return /^\+1\d{10}$/.test(String(value || "").trim());
@@ -21047,11 +21048,12 @@ function viewSettings(){
     }
 
     function updateBodyVisibility(){
+      if (!simulatorEnabled) return;
       const isSms = simType.value === "sms";
       bodyWrap.style.display = isSms ? "" : "none";
     }
     updateBodyVisibility();
-    simType.addEventListener("change", updateBodyVisibility);
+    simType?.addEventListener("change", updateBodyVisibility);
 
     // keep dropdown synced with ACTIVE_TO (fallback to custom if not in list)
     if (simTo) {
@@ -21096,10 +21098,11 @@ function viewSettings(){
     document.getElementById("simClear")?.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      simOut.textContent = "";
+      if (simOut) simOut.textContent = "";
     });
 
   document.getElementById("simSend")?.addEventListener("click", async (e) => {
+    if (!simulatorEnabled) return;
     const btn = e.target;
     if (btn.disabled) return; // Already sending
   
@@ -21108,8 +21111,8 @@ function viewSettings(){
     simOut.textContent = "Sending...";
 
     const To = getSimulatorToValue();
-    const From = document.getElementById("simFrom").value.trim();
-    const Body = document.getElementById("simBody").value.trim();
+    const From = document.getElementById("simFrom")?.value?.trim() || "";
+    const Body = document.getElementById("simBody")?.value?.trim() || "";
     if (simTo?.value === "__custom__" && !isValidSimulatorCustomTo(To)) {
       updateSimulatorToUI();
       throw new Error("Invalid custom To number. Expected +1XXXXXXXXXX.");
