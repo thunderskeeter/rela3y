@@ -93,6 +93,9 @@ const twilioConnectSchema = z.object({
   phoneNumber: z.string().trim().max(32).optional(),
   voiceForwardTo: z.string().trim().max(32).optional(),
   voiceDialTimeoutSec: z.number().int().min(10).max(60).optional(),
+  voiceMode: z.enum(['answer_then_text', 'forward_first']).optional(),
+  missedCallAudioUrl: z.string().trim().max(2048).optional(),
+  missedCallFallbackText: z.string().trim().max(320).optional(),
   webhookAuthToken: z.string().trim().max(256).optional()
 }).refine((value) => Object.keys(value).length > 0, {
   message: 'At least one field must be provided'
@@ -382,6 +385,9 @@ function buildDeveloperOpsOverview(data) {
         phoneNumber: String(twilioRaw.phoneNumber || ''),
         voiceForwardTo: String(twilioRaw.voiceForwardTo || ''),
         voiceDialTimeoutSec: Number(twilioRaw.voiceDialTimeoutSec || 20) || 20,
+        voiceMode: String(twilioRaw.voiceMode || 'answer_then_text'),
+        missedCallAudioUrl: String(twilioRaw.missedCallAudioUrl || ''),
+        missedCallFallbackText: String(twilioRaw.missedCallFallbackText || ''),
         lastStatus: twilioRaw.lastStatus ? String(twilioRaw.lastStatus) : null,
         lastTestedAt: twilioRaw.lastTestedAt ? Number(twilioRaw.lastTestedAt) : null
       },

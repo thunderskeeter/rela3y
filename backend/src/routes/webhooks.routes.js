@@ -6,7 +6,10 @@ const { evaluateTrigger, isWithinBusinessHours } = require("../services/automati
 const { cancelJobsForConvo } = require("../services/scheduler");
 const { emitEvent } = require("../services/notificationService");
 const { pushBookingToConnectedCalendars } = require("../services/calendarIcsService");
-const { getTenantTwilioConfig } = require("../services/twilioIntegrationService");
+const {
+  getTenantTwilioConfig,
+  VOICE_MODE_FORWARD_FIRST
+} = require("../services/twilioIntegrationService");
 const { createLeadEvent, updateIntelligence } = require('../services/revenueIntelligenceService');
 const { handleSignal } = require('../services/revenueOrchestrator');
 const { claimWebhookEvent } = require('../services/webhookIdempotencyService');
@@ -134,6 +137,15 @@ function escapeXml(value) {
 function twiml(res, xmlBody) {
   res.set('Content-Type', 'text/xml; charset=utf-8');
   return res.status(200).send(xmlBody);
+}
+
+function missedCallVoiceTwiml(twilioCfg = {}) {
+  const audioUrl = String(twilioCfg?.missedCallAudioUrl || '').trim();
+  if (audioUrl) {
+    return `<?xml version="1.0" encoding="UTF-8"?><Response><Play>${escapeXml(audioUrl)}</Play><Hangup/></Response>`;
+  }
+  const fallbackText = String(twilioCfg?.missedCallFallbackText || "Thanks for calling. Sorry we missed you. I'm texting you now so we can help faster.").trim();
+  return `<?xml version="1.0" encoding="UTF-8"?><Response><Say>${escapeXml(fallbackText)}</Say><Hangup/></Response>`;
 }
 
 function hasValidTwilioSignature(req) {
@@ -379,6 +391,18 @@ webhooksRouter.post("/voice/incoming", validateBody(voiceSchema), async (req, re
     const caller = String(req.body?.From || '').trim();
     const to = String(tenant?.to || '').trim();
     const twilioCfg = getTenantTwilioConfig(tenant);
+    const callSid = String(req.body?.CallSid || '').trim();
+    const voiceMode = String(twilioCfg?.voiceMode || '').trim().toLowerCase();
+    if (voiceMode !== VOICE_MODE_FORWARD_FIRST) {
+      if (caller && to) {
+        const callEventId = callSid || fingerprintWebhookEvent(['twilio_voice_incoming', tenant.accountId, to, caller], 30_000);
+        const dedupe = await claimWebhookEvent(tenant.accountId, 'twilio_voice_incoming', callEventId);
+        if (dedupe.duplicate !== true) {
+          await processMissedCall({ tenant, from: caller, to });
+        }
+      }
+      return twiml(res, missedCallVoiceTwiml(twilioCfg));
+    }
     const forwardTo = String(twilioCfg?.voiceForwardTo || '').trim();
     const timeoutSec = Number(twilioCfg?.voiceDialTimeoutSec || 20) || 20;
     const baseUrl = inferredBaseUrl(req);
@@ -430,7 +454,7 @@ webhooksRouter.post("/voice/dial-result", validateBody(voiceSchema), async (req,
       await processMissedCall({ tenant, from, to });
       return twiml(
         res,
-        `<?xml version="1.0" encoding="UTF-8"?><Response><Say>Sorry we missed your call. We will text you now.</Say><Hangup/></Response>`
+        missedCallVoiceTwiml(getTenantTwilioConfig(tenant))
       );
     }
 

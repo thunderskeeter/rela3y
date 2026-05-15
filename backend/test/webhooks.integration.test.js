@@ -18,6 +18,16 @@ function stripeSig(payload, secret) {
 async function run() {
   const app = await initApp();
 
+  {
+    const { validatePublicHttpsAudioUrl } = require('../src/services/twilioIntegrationService');
+    assert.equal(
+      validatePublicHttpsAudioUrl('https://cdn.example.com/audio/missed-call-message.mp3'),
+      'https://cdn.example.com/audio/missed-call-message.mp3'
+    );
+    assert.throws(() => validatePublicHttpsAudioUrl('http://cdn.example.com/audio.mp3'), /https/);
+    assert.throws(() => validatePublicHttpsAudioUrl('https://localhost/audio.mp3'), /publicly accessible/);
+  }
+
   await seedBaseline();
   {
     const payload = {
@@ -115,6 +125,66 @@ async function run() {
       .send(missedCallPayload);
     assert.equal(callSecond.statusCode, 200);
     assert.equal(callSecond.body?.duplicate, true);
+  }
+
+  await seedBaseline();
+  {
+    const { loadData, saveDataDebounced, flushDataNow } = require('../src/store/dataStore');
+    const data = loadData();
+    data.accounts[ACCOUNT_A_TO].integrations = data.accounts[ACCOUNT_A_TO].integrations || {};
+    data.accounts[ACCOUNT_A_TO].integrations.twilio = {
+      enabled: true,
+      accountSid: 'AC11111111111111111111111111111111',
+      apiKeySid: 'SK11111111111111111111111111111111',
+      apiKeySecret: 'test-secret',
+      phoneNumber: ACCOUNT_A_TO,
+      voiceMode: 'answer_then_text',
+      missedCallAudioUrl: 'https://cdn.example.com/audio/missed-call-message.mp3',
+      missedCallFallbackText: "Thanks for calling. Sorry we missed you. I'm texting you now."
+    };
+    saveDataDebounced(data);
+    await flushDataNow();
+
+    const firstVoice = await request(app)
+      .post('/webhooks/voice/incoming')
+      .set('x-dev-webhook-secret', process.env.WEBHOOK_DEV_SECRET)
+      .send({
+        From: '+18145550130',
+        To: ACCOUNT_A_TO,
+        CallSid: 'CA_voice_audio_1'
+      });
+    assert.equal(firstVoice.statusCode, 200);
+    assert.match(firstVoice.text, /<Play>https:\/\/cdn\.example\.com\/audio\/missed-call-message\.mp3<\/Play>/);
+    assert.match(firstVoice.text, /<Hangup\/>/);
+
+    const leadCountAfterFirst = (loadData().leadEvents || []).length;
+    const duplicateVoice = await request(app)
+      .post('/webhooks/voice/incoming')
+      .set('x-dev-webhook-secret', process.env.WEBHOOK_DEV_SECRET)
+      .send({
+        From: '+18145550130',
+        To: ACCOUNT_A_TO,
+        CallSid: 'CA_voice_audio_1'
+      });
+    assert.equal(duplicateVoice.statusCode, 200);
+    assert.match(duplicateVoice.text, /<Play>https:\/\/cdn\.example\.com\/audio\/missed-call-message\.mp3<\/Play>/);
+    assert.equal((loadData().leadEvents || []).length, leadCountAfterFirst);
+
+    const fallbackData = loadData();
+    fallbackData.accounts[ACCOUNT_A_TO].integrations.twilio.missedCallAudioUrl = '';
+    fallbackData.accounts[ACCOUNT_A_TO].integrations.twilio.missedCallFallbackText = 'We missed you and will text now.';
+    saveDataDebounced(fallbackData);
+    await flushDataNow();
+    const fallbackVoice = await request(app)
+      .post('/webhooks/voice/incoming')
+      .set('x-dev-webhook-secret', process.env.WEBHOOK_DEV_SECRET)
+      .send({
+        From: '+18145550131',
+        To: ACCOUNT_A_TO,
+        CallSid: 'CA_voice_fallback_1'
+      });
+    assert.equal(fallbackVoice.statusCode, 200);
+    assert.match(fallbackVoice.text, /<Say>We missed you and will text now\.<\/Say>/);
   }
 
   await seedBaseline();

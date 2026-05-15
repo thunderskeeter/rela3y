@@ -13834,6 +13834,36 @@ function viewSettings(){
               <input class="input" id="superadminTwilioVoiceDialTimeoutInput" type="number" min="10" max="60" value="20" />
             </div>
           </div>
+          <div style="height:8px;"></div>
+          <div class="card" style="background:var(--panel);">
+            <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+              <div class="col" style="gap:4px;">
+                <div class="h1" style="margin:0;">Missed Call Voice Message</div>
+                <div class="p">Twilio answers, plays a public ElevenLabs MP3, hangs up, then Relay sends the missed-call SMS.</div>
+              </div>
+              <span class="badge">Public HTTPS audio</span>
+            </div>
+            <div style="height:8px;"></div>
+            <div class="grid2">
+              <div class="col">
+                <label class="p">Voice handling</label>
+                <select class="select" id="superadminTwilioVoiceModeInput">
+                  <option value="answer_then_text">Answer, play audio, then text</option>
+                  <option value="forward_first">Forward first, text if missed</option>
+                </select>
+              </div>
+              <div class="col">
+                <label class="p">ElevenLabs MP3 URL</label>
+                <input class="input" id="superadminTwilioMissedCallAudioUrlInput" placeholder="https://cdn.example.com/audio/missed-call-message.mp3" />
+              </div>
+            </div>
+            <div style="height:8px;"></div>
+            <div class="col">
+              <label class="p">Fallback spoken text</label>
+              <textarea class="input" id="superadminTwilioMissedCallFallbackTextInput" rows="3" placeholder="Thanks for calling. Sorry we missed you. I'm texting you now so we can help faster."></textarea>
+            </div>
+            <div class="p" style="margin-top:8px;">The audio URL must be publicly reachable over HTTPS. Do not paste local computer paths or localhost URLs.</div>
+          </div>
           <div style="height:10px;"></div>
           <div class="row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap;">
             <div class="p" id="superadminTwilioActionStatus" style="min-height:18px; margin-right:auto;"></div>
@@ -18575,7 +18605,9 @@ function viewSettings(){
         twilioManageDetails.textContent = "Not connected";
         return;
       }
-      twilioManageDetails.textContent = `SID: ${cfg.accountSidMasked || "--"} | Last tested: ${formatSyncTs(cfg.lastTestedAt)} | Forward: ${cfg.voiceForwardTo || "not set"} | Webhook token: ${cfg.hasWebhookAuthToken ? "set" : "missing"}`;
+      const voiceMode = String(cfg.voiceMode || "answer_then_text") === "forward_first" ? "Forward first" : "Answer + text";
+      const audioState = String(cfg.missedCallAudioUrl || "").trim() ? "audio URL set" : "fallback voice";
+      twilioManageDetails.textContent = `SID: ${cfg.accountSidMasked || "--"} | Last tested: ${formatSyncTs(cfg.lastTestedAt)} | Voice: ${voiceMode} (${audioState}) | Webhook token: ${cfg.hasWebhookAuthToken ? "set" : "missing"}`;
     }
     function syncStripeManageDetails() {
       const cfg = integrationsSnapshot?.stripe || {};
@@ -20252,6 +20284,9 @@ function viewSettings(){
     const superadminTwilioPhoneNumberInput = document.getElementById("superadminTwilioPhoneNumberInput");
     const superadminTwilioVoiceForwardToInput = document.getElementById("superadminTwilioVoiceForwardToInput");
     const superadminTwilioVoiceDialTimeoutInput = document.getElementById("superadminTwilioVoiceDialTimeoutInput");
+    const superadminTwilioVoiceModeInput = document.getElementById("superadminTwilioVoiceModeInput");
+    const superadminTwilioMissedCallAudioUrlInput = document.getElementById("superadminTwilioMissedCallAudioUrlInput");
+    const superadminTwilioMissedCallFallbackTextInput = document.getElementById("superadminTwilioMissedCallFallbackTextInput");
     const superadminTwilioActionStatus = document.getElementById("superadminTwilioActionStatus");
     const superadminTwilioSaveBtn = document.getElementById("superadminTwilioSaveBtn");
     const superadminTwilioTestBtn = document.getElementById("superadminTwilioTestBtn");
@@ -20564,6 +20599,9 @@ function viewSettings(){
       if (superadminTwilioPhoneNumberInput) superadminTwilioPhoneNumberInput.value = String(tw.phoneNumber || "");
       if (superadminTwilioVoiceForwardToInput) superadminTwilioVoiceForwardToInput.value = String(tw.voiceForwardTo || "");
       if (superadminTwilioVoiceDialTimeoutInput) superadminTwilioVoiceDialTimeoutInput.value = String(Number(tw.voiceDialTimeoutSec || 20) || 20);
+      if (superadminTwilioVoiceModeInput) superadminTwilioVoiceModeInput.value = String(tw.voiceMode || "answer_then_text") === "forward_first" ? "forward_first" : "answer_then_text";
+      if (superadminTwilioMissedCallAudioUrlInput) superadminTwilioMissedCallAudioUrlInput.value = String(tw.missedCallAudioUrl || "");
+      if (superadminTwilioMissedCallFallbackTextInput) superadminTwilioMissedCallFallbackTextInput.value = String(tw.missedCallFallbackText || "Thanks for calling. Sorry we missed you. I'm texting you now so we can help faster.");
     }
 
     function renderSuperadminOpsView(payload) {
@@ -20952,7 +20990,10 @@ function viewSettings(){
         messagingServiceSid: String(superadminTwilioMessagingServiceSidInput?.value || "").trim(),
         phoneNumber: String(superadminTwilioPhoneNumberInput?.value || "").trim(),
         voiceForwardTo: String(superadminTwilioVoiceForwardToInput?.value || "").trim(),
-        voiceDialTimeoutSec: Number(superadminTwilioVoiceDialTimeoutInput?.value || 20)
+        voiceDialTimeoutSec: Number(superadminTwilioVoiceDialTimeoutInput?.value || 20),
+        voiceMode: String(superadminTwilioVoiceModeInput?.value || "answer_then_text").trim(),
+        missedCallAudioUrl: String(superadminTwilioMissedCallAudioUrlInput?.value || "").trim(),
+        missedCallFallbackText: String(superadminTwilioMissedCallFallbackTextInput?.value || "").trim()
       };
       try {
         await apiPut(`/api/admin/developer/twilio/${encodeURIComponent(accountId)}`, payload);

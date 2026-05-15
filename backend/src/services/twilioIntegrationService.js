@@ -10,6 +10,9 @@ const E164_REGEX = /^\+[1-9]\d{1,14}$/;
 const SID_ACCOUNT_REGEX = /^AC[0-9a-fA-F]{32}$/;
 const SID_API_KEY_REGEX = /^SK[0-9a-fA-F]{32}$/;
 const SID_MESSAGING_SERVICE_REGEX = /^MG[0-9a-fA-F]{32}$/;
+const VOICE_MODE_ANSWER_THEN_TEXT = 'answer_then_text';
+const VOICE_MODE_FORWARD_FIRST = 'forward_first';
+const DEFAULT_MISSED_CALL_FALLBACK_TEXT = "Thanks for calling. Sorry we missed you. I'm texting you now so we can help faster.";
 
 function buildConvoKey(to, from) {
   return `${String(to || '').trim()}__${String(from || '').trim()}`;
@@ -49,6 +52,9 @@ function ensureTwilioConfig(account) {
     phoneNumber: String(existing.phoneNumber || '').trim(),
     voiceForwardTo: String(existing.voiceForwardTo || '').trim(),
     voiceDialTimeoutSec: Number(existing.voiceDialTimeoutSec || 20) || 20,
+    voiceMode: normalizeVoiceMode(existing.voiceMode),
+    missedCallAudioUrl: String(existing.missedCallAudioUrl || '').trim(),
+    missedCallFallbackText: normalizeMissedCallFallbackText(existing.missedCallFallbackText),
     webhookAuthToken: String(existing.webhookAuthToken || '').trim(),
     connectedAt: existing.connectedAt ? Number(existing.connectedAt) : null,
     lastTestedAt: existing.lastTestedAt ? Number(existing.lastTestedAt) : null,
@@ -70,6 +76,46 @@ function accountByTenant(data, tenant) {
   return { account, to };
 }
 
+function normalizeVoiceMode(value) {
+  const mode = String(value || '').trim().toLowerCase();
+  if (mode === VOICE_MODE_FORWARD_FIRST) return VOICE_MODE_FORWARD_FIRST;
+  return VOICE_MODE_ANSWER_THEN_TEXT;
+}
+
+function normalizeMissedCallFallbackText(value) {
+  const text = String(value || '').trim();
+  return text || DEFAULT_MISSED_CALL_FALLBACK_TEXT;
+}
+
+function isPrivateHostname(hostname) {
+  const host = String(hostname || '').trim().toLowerCase();
+  if (!host) return true;
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host === '127.0.0.1' || host === '0.0.0.0' || host === '::1') return true;
+  if (/^10\./.test(host)) return true;
+  if (/^192\.168\./.test(host)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return true;
+  return false;
+}
+
+function validatePublicHttpsAudioUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('missedCallAudioUrl must be a valid public HTTPS URL');
+  }
+  if (url.protocol !== 'https:') {
+    throw new Error('missedCallAudioUrl must use https://');
+  }
+  if (isPrivateHostname(url.hostname)) {
+    throw new Error('missedCallAudioUrl must be publicly accessible, not localhost or a private network URL');
+  }
+  return url.toString();
+}
+
 function validateTwilioInput(input, currentCfg = null) {
   const src = input && typeof input === 'object' ? input : {};
   const accountSid = String(src.accountSid || '').trim() || String(currentCfg?.accountSid || '').trim();
@@ -83,6 +129,13 @@ function validateTwilioInput(input, currentCfg = null) {
   const voiceDialTimeoutSec = Number.isFinite(Number(voiceDialTimeoutRaw))
     ? Math.round(Number(voiceDialTimeoutRaw))
     : Number(currentCfg?.voiceDialTimeoutSec || 20);
+  const voiceMode = normalizeVoiceMode(src.voiceMode || currentCfg?.voiceMode);
+  const missedCallAudioUrl = Object.prototype.hasOwnProperty.call(src, 'missedCallAudioUrl')
+    ? validatePublicHttpsAudioUrl(src.missedCallAudioUrl)
+    : String(currentCfg?.missedCallAudioUrl || '').trim();
+  const missedCallFallbackText = Object.prototype.hasOwnProperty.call(src, 'missedCallFallbackText')
+    ? normalizeMissedCallFallbackText(src.missedCallFallbackText).slice(0, 320)
+    : normalizeMissedCallFallbackText(currentCfg?.missedCallFallbackText);
   const webhookAuthToken = String(src.webhookAuthToken || '').trim() || String(currentCfg?.webhookAuthToken || '').trim();
 
   if (!SID_ACCOUNT_REGEX.test(accountSid)) {
@@ -116,6 +169,9 @@ function validateTwilioInput(input, currentCfg = null) {
     phoneNumber,
     voiceForwardTo,
     voiceDialTimeoutSec,
+    voiceMode,
+    missedCallAudioUrl,
+    missedCallFallbackText,
     webhookAuthToken
   };
 }
@@ -207,6 +263,9 @@ function twilioSnapshotFromConfig(cfg) {
     phoneNumber: String(current.phoneNumber || ''),
     voiceForwardTo: String(current.voiceForwardTo || ''),
     voiceDialTimeoutSec: Number(current.voiceDialTimeoutSec || 20) || 20,
+    voiceMode: normalizeVoiceMode(current.voiceMode),
+    missedCallAudioUrl: String(current.missedCallAudioUrl || ''),
+    missedCallFallbackText: normalizeMissedCallFallbackText(current.missedCallFallbackText),
     hasWebhookAuthToken: Boolean(String(current.webhookAuthToken || '').trim()),
     webhookAuthTokenMasked: maskSecret(current.webhookAuthToken, { left: 3, right: 3 }),
     connectedAt: current.connectedAt ? Number(current.connectedAt) : null,
@@ -290,6 +349,9 @@ function disconnectTwilioForTenant(tenant) {
     phoneNumber: '',
     voiceForwardTo: '',
     voiceDialTimeoutSec: Number(cfg.voiceDialTimeoutSec || 20) || 20,
+    voiceMode: normalizeVoiceMode(cfg.voiceMode),
+    missedCallAudioUrl: String(cfg.missedCallAudioUrl || '').trim(),
+    missedCallFallbackText: normalizeMissedCallFallbackText(cfg.missedCallFallbackText),
     webhookAuthToken: '',
     connectedAt: cfg.connectedAt || null,
     lastTestedAt: Date.now(),
@@ -328,7 +390,10 @@ function getTenantTwilioConfig(tenant) {
     messagingServiceSid: String(cfg.messagingServiceSid || '').trim(),
     phoneNumber: String(cfg.phoneNumber || '').trim(),
     voiceForwardTo: String(cfg.voiceForwardTo || '').trim(),
-    voiceDialTimeoutSec: Number(cfg.voiceDialTimeoutSec || 20) || 20
+    voiceDialTimeoutSec: Number(cfg.voiceDialTimeoutSec || 20) || 20,
+    voiceMode: normalizeVoiceMode(cfg.voiceMode),
+    missedCallAudioUrl: String(cfg.missedCallAudioUrl || '').trim(),
+    missedCallFallbackText: normalizeMissedCallFallbackText(cfg.missedCallFallbackText)
   };
 }
 
@@ -407,5 +472,10 @@ module.exports = {
   getTenantTwilioConfig,
   twilioReadyForSend,
   buildTwilioStatusCallbackUrl,
-  sendTwilioMessageForTenant
+  sendTwilioMessageForTenant,
+  normalizeVoiceMode,
+  validatePublicHttpsAudioUrl,
+  DEFAULT_MISSED_CALL_FALLBACK_TEXT,
+  VOICE_MODE_ANSWER_THEN_TEXT,
+  VOICE_MODE_FORWARD_FIRST
 };

@@ -50,6 +50,9 @@ const twilioConnectSchema = z.object({
   phoneNumber: z.string().trim().optional(),
   voiceForwardTo: z.string().trim().optional(),
   voiceDialTimeoutSec: z.number().int().min(10).max(60).optional(),
+  voiceMode: z.enum(['answer_then_text', 'forward_first']).optional(),
+  missedCallAudioUrl: z.string().trim().max(2048).optional(),
+  missedCallFallbackText: z.string().trim().max(320).optional(),
   webhookAuthToken: z.string().trim().optional()
 }).passthrough();
 
