@@ -411,6 +411,15 @@ function shouldGrantBootstrapDeveloperAccess(email) {
   return normalizeEmail(process.env.BOOTSTRAP_OWNER_EMAIL || '') === normalized;
 }
 
+function shouldPromoteBootstrapOwnerToSuperadmin(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return false;
+  if (normalizeEmail(process.env.BOOTSTRAP_OWNER_EMAIL || '') !== normalized) return false;
+  const raw = String(process.env.BOOTSTRAP_OWNER_SUPERADMIN || '').trim().toLowerCase();
+  if (raw === 'false' || raw === '0' || raw === 'no' || raw === 'off') return false;
+  return true;
+}
+
 function accountLooksLikeArcRelayOwnerAccount(account) {
   const names = [
     account?.businessName,
@@ -487,19 +496,20 @@ function ensureBootstrapOwnerUser() {
   const existing = data.users.find((u) => normalizeEmail(u?.email) === email);
   if (existing) {
     existing.passwordHash = hashPassword(password);
-    existing.role = 'owner';
+    existing.role = shouldPromoteBootstrapOwnerToSuperadmin(email) ? 'superadmin' : 'owner';
     existing.accountIds = Array.from(new Set([...(Array.isArray(existing.accountIds) ? existing.accountIds : []), accountId]));
-    if (shouldGrantBootstrapDeveloperAccess(email)) existing.developerAccess = true;
+    if (shouldGrantBootstrapDeveloperAccess(email) || existing.role === 'superadmin') existing.developerAccess = true;
     existing.disabled = false;
   } else {
+    const role = shouldPromoteBootstrapOwnerToSuperadmin(email) ? 'superadmin' : 'owner';
     data.users.push({
       id: randomId(),
       name: String(process.env.BOOTSTRAP_OWNER_NAME || 'Owner').trim(),
       email,
       passwordHash: hashPassword(password),
-      role: 'owner',
+      role,
       accountIds: [accountId],
-      developerAccess: shouldGrantBootstrapDeveloperAccess(email),
+      developerAccess: shouldGrantBootstrapDeveloperAccess(email) || role === 'superadmin',
       createdAt: Date.now(),
       lastLoginAt: null,
       disabled: false
