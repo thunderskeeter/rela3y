@@ -74,7 +74,15 @@ const twilioPurchaseSchema = z.object({
   phoneNumber: z.string().trim().regex(/^\+[1-9]\d{1,14}$/),
   label: z.string().trim().max(64).optional().default(''),
   setPrimary: z.boolean().optional().default(true),
-  webhookBaseUrl: z.string().trim().url().max(2048).optional().default('')
+  webhookBaseUrl: z.string().trim().max(2048).optional().default('').refine((value) => {
+    if (!value) return true;
+    try {
+      const url = new URL(value);
+      return /^https?:$/i.test(url.protocol);
+    } catch {
+      return false;
+    }
+  }, { message: 'webhookBaseUrl must be a valid absolute URL' })
 });
 
 const twilioConnectSchema = z.object({
