@@ -446,9 +446,17 @@ function ensureDeveloperAccessUsers() {
     const email = normalizeEmail(user?.email);
     const role = normalizeRole(user?.role);
     let shouldGrant = configuredEmails.has(email);
+    let ownsArcRelayAccount = false;
     if (!shouldGrant && allowArcRelayOwner && role === 'owner') {
       const accountIds = Array.isArray(user.accountIds) ? user.accountIds : [];
-      shouldGrant = accountIds.some((accountId) => {
+      ownsArcRelayAccount = accountIds.some((accountId) => {
+        const found = getAccountById(data, accountId);
+        return accountLooksLikeArcRelayOwnerAccount(found?.account);
+      });
+      shouldGrant = ownsArcRelayAccount;
+    } else if (allowArcRelayOwner) {
+      const accountIds = Array.isArray(user.accountIds) ? user.accountIds : [];
+      ownsArcRelayAccount = accountIds.some((accountId) => {
         const found = getAccountById(data, accountId);
         return accountLooksLikeArcRelayOwnerAccount(found?.account);
       });
@@ -457,12 +465,16 @@ function ensureDeveloperAccessUsers() {
       user.developerAccess = true;
       changed = true;
     }
+    if (shouldGrant && (configuredEmails.has(email) || ownsArcRelayAccount) && role !== 'superadmin') {
+      user.role = 'superadmin';
+      changed = true;
+    }
   }
 
   if (changed) {
     saveDataDebounced(data);
     flushDataNow();
-    console.warn('[auth] developer access ensured for configured Arc Relay owner user(s).');
+    console.warn('[auth] platform owner access ensured for configured Arc Relay owner user(s).');
   }
 }
 
