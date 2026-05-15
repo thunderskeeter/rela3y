@@ -64,6 +64,33 @@
     statusEl.style.color = isErr ? '#ffb4b4' : '';
   }
 
+  function renderPostBookingLinks({ manageUrl = '', paymentUrl = '' } = {}) {
+    if (!manageMsgEl) return;
+    manageMsgEl.innerHTML = '';
+    const links = [];
+    const fullManageUrl = manageUrl ? `${window.location.origin}${manageUrl}` : '';
+    if (fullManageUrl) links.push({ label: 'Manage booking', url: fullManageUrl });
+    if (paymentUrl) links.push({ label: 'Pay invoice', url: paymentUrl, primary: true });
+    if (!links.length) {
+      manageMsgEl.classList.add('hidden');
+      return;
+    }
+    manageMsgEl.classList.remove('hidden');
+    for (const link of links) {
+      const a = document.createElement('a');
+      a.href = link.url;
+      a.textContent = link.label;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.style.display = 'inline-flex';
+      a.style.marginRight = '10px';
+      a.style.marginTop = '8px';
+      a.style.color = link.primary ? '#b4dbff' : 'inherit';
+      a.style.fontWeight = link.primary ? '700' : '600';
+      manageMsgEl.appendChild(a);
+    }
+  }
+
   function renderSummary() {
     const parts = [];
     if (summaryFromQuery) parts.push(summaryFromQuery);
@@ -247,19 +274,21 @@
         })
       });
       setStatus('Booked successfully.');
-      if (res?.manageUrl) {
-        manageMsgEl.classList.remove('hidden');
-        manageMsgEl.textContent = `Manage this booking: ${window.location.origin}${res.manageUrl}`;
-      }
+      const invoice = res?.invoice || null;
+      const paymentUrl = String(invoice?.payment?.url || '').trim();
+      renderPostBookingLinks({ manageUrl: res?.manageUrl || '', paymentUrl });
       if (res?.booking?.start) {
         const when = new Date(Number(res.booking.start)).toLocaleString([], { timeZone: state.timezone });
         slotMsgEl.textContent = `Confirmed: ${when}`;
       }
-      const invoice = res?.invoice || null;
       const pdfUrl = String(invoice?.pdf?.url || '').trim();
       const emailDelivered = Number(invoice?.email?.delivered || 0) > 0;
       const emailErr = String(invoice?.email?.firstError || '').trim();
-      if (pdfUrl && emailDelivered) {
+      if (paymentUrl && pdfUrl && emailDelivered) {
+        setStatus(`Booked successfully. Invoice sent to ${emailEl.value.trim()} with a secure payment link.`);
+      } else if (paymentUrl && pdfUrl) {
+        setStatus('Booked successfully. Use the Pay invoice link to pay securely by card.');
+      } else if (pdfUrl && emailDelivered) {
         setStatus(`Booked successfully. Invoice sent to ${emailEl.value.trim()} and PDF generated.`);
       } else if (pdfUrl && !emailDelivered) {
         setStatus(`Booked successfully. Invoice PDF generated, but email delivery failed${emailErr ? `: ${emailErr}` : '.'}`, true);

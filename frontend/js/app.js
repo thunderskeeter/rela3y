@@ -16723,10 +16723,16 @@ function viewSettings(){
           `Live billing portal is not connected yet. Requested plan=${plan}, cadence=${cadence}.`
         );
       }
-      async function openBillingCheckout() {
+      async function openBillingCheckout({ planKey = "", cadence = "" } = {}) {
         try {
           const returnUrl = getBillingReturnUrl();
-          const result = await apiPost("/api/billing/checkout", { returnUrl });
+          const selectedPlan = normalizePlanKey(planKey || billingState.summary?.plan?.key || "pro");
+          const selectedCadence = cadence === "annual" ? "annual" : "monthly";
+          const result = await apiPost("/api/billing/checkout", {
+            returnUrl,
+            planKey: selectedPlan,
+            cadence: selectedCadence
+          });
           const url = String(result?.url || "").trim();
           if (url) {
             window.open(url, "_blank", "noopener,noreferrer");
@@ -17251,7 +17257,7 @@ function viewSettings(){
           openBillingPortal({ plan: normalizePlanKey(billingState.summary?.plan?.key), cadence: billingState.cadence });
         });
         billingEls.dueCtaBtn?.addEventListener("click", () => {
-          openBillingCheckout();
+          openBillingCheckout({ planKey: normalizePlanKey(billingState.summary?.plan?.key), cadence: billingState.cadence });
         });
 
         billingEls.updatePaymentBtn?.addEventListener("click", () => {
@@ -17317,11 +17323,15 @@ function viewSettings(){
             body: `Switch from ${currentPlan} to ${planKey} (${cadence})?`,
             confirmLabel: `Switch to ${planKey}`,
             onConfirm: async () => {
-              await apiPatch("/api/billing/plan", { planKey });
-              if (billingState.demoMode === true) saveTenantPlanOverride(planKey);
+              if (billingState.demoMode === true) {
+                await apiPatch("/api/billing/plan", { planKey });
+                saveTenantPlanOverride(planKey);
+              } else {
+                await openBillingCheckout({ planKey, cadence });
+              }
               closeBillingModal(billingEls.planModal);
               await loadBillingData();
-              showSettingsToast(`Plan updated to ${planKey}.`);
+              showSettingsToast(billingState.demoMode === true ? `Plan updated to ${planKey}.` : "Stripe checkout opened.");
             }
           });
         });
@@ -21793,7 +21803,11 @@ window.addEventListener("DOMContentLoaded", () => {
   async function openBillDueCheckout() {
     try {
       const returnUrl = getBillingReturnUrl();
-      const result = await apiPost("/api/billing/checkout", { returnUrl });
+      const result = await apiPost("/api/billing/checkout", {
+        returnUrl,
+        planKey: normalizePlanKey(navBillDueState.planKey || "pro"),
+        cadence: "monthly"
+      });
       const url = String(result?.url || "").trim();
       if (url) {
         window.open(url, "_blank", "noopener,noreferrer");

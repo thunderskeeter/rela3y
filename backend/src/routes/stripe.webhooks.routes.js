@@ -9,7 +9,7 @@ const { loadData, getAccountByTo } = require('../store/dataStore');
 const { emitEvent } = require('../services/notificationService');
 
 const stripeWebhooksRouter = express.Router();
-const ALLOWED_STRIPE_EVENT_PREFIX = ['invoice.', 'customer.subscription.'];
+const ALLOWED_STRIPE_EVENT_PREFIX = ['invoice.', 'customer.subscription.', 'checkout.session.'];
 
 function safeEqual(a, b) {
   const aa = Buffer.from(String(a || ''), 'utf8');

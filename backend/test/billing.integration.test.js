@@ -99,6 +99,54 @@ async function run() {
     assert.ok(invoices.some((x) => String(x?.id || '') === 'in_fail_2'));
   }
 
+  await seedBaseline();
+  {
+    const data = loadData();
+    const account = data.accounts?.[ACCOUNT_A_TO];
+    assert.ok(account, 'expected account');
+    account.customerBilling = {
+      invoices: [{
+        id: 'cinv_test_paid',
+        invoiceNumber: 'INV-CUST-1',
+        conversationId: `${ACCOUNT_A_TO}__+18145550123`,
+        amountCents: 25000,
+        paymentStatus: 'open',
+        payment: {
+          provider: 'stripe_checkout',
+          checkoutSessionId: 'cs_test_old',
+          status: 'open',
+          url: 'https://checkout.stripe.com/c/pay/test'
+        }
+      }]
+    };
+    saveDataDebounced(data);
+    await flushDataNow();
+
+    applyStripeWebhookEventForTo(ACCOUNT_A_TO, {
+      id: 'evt_checkout_paid_1',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_test_paid',
+          status: 'complete',
+          payment_status: 'paid',
+          payment_intent: 'pi_test_paid',
+          metadata: {
+            invoiceId: 'cinv_test_paid',
+            accountId: String(account.accountId || account.id || ''),
+            to: ACCOUNT_A_TO
+          }
+        }
+      }
+    });
+
+    const updated = loadData().accounts?.[ACCOUNT_A_TO];
+    const invoice = updated?.customerBilling?.invoices?.find((x) => String(x?.id || '') === 'cinv_test_paid');
+    assert.equal(String(invoice?.paymentStatus || ''), 'paid');
+    assert.equal(String(invoice?.payment?.status || ''), 'paid');
+    assert.equal(String(invoice?.payment?.paymentIntentId || ''), 'pi_test_paid');
+  }
+
   console.log('[tests] billing integration checks passed');
 }
 

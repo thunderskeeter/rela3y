@@ -12,6 +12,8 @@ const { APP_PUBLIC_BASE_URL, NODE_ENV } = require('../config/runtime');
 const billingRouter = express.Router();
 
 const checkoutSchema = z.object({
+  planKey: z.enum(['starter', 'pro', 'growth']).optional().default('pro'),
+  cadence: z.enum(['monthly', 'annual']).optional().default('monthly'),
   returnUrl: z.string().trim().url().max(2048).optional()
 });
 
@@ -219,6 +221,46 @@ async function createStripeBillingPortalSession({ secretKey, customerId, returnU
   return String(parsed?.url || '').trim();
 }
 
+async function createStripeSubscriptionCheckoutSession({ secretKey, customerId, plan, cadence, returnUrl, tenant }) {
+  const selectedCadence = String(cadence || 'monthly') === 'annual' ? 'annual' : 'monthly';
+  const monthlyPrice = Number(plan?.priceMonthly || 0);
+  const amount = selectedCadence === 'annual'
+    ? Math.round(monthlyPrice * 12 * 0.85 * 100)
+    : Math.round(monthlyPrice * 100);
+  const interval = selectedCadence === 'annual' ? 'year' : 'month';
+  const normalizedReturn = String(returnUrl || '').trim();
+  const joiner = normalizedReturn.includes('?') ? '&' : '?';
+  const successUrl = `${normalizedReturn}${joiner}billing=success&session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = `${normalizedReturn}${joiner}billing=cancel`;
+
+  const parsed = await stripeRequest(secretKey, '/v1/checkout/sessions', {
+    method: 'POST',
+    form: {
+      mode: 'subscription',
+      customer: String(customerId || '').trim(),
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      'line_items[0][quantity]': '1',
+      'line_items[0][price_data][currency]': 'usd',
+      'line_items[0][price_data][unit_amount]': String(amount),
+      'line_items[0][price_data][recurring][interval]': interval,
+      'line_items[0][price_data][product_data][name]': `Arc Relay ${String(plan?.name || 'Plan')}`,
+      'metadata[accountId]': String(tenant?.accountId || ''),
+      'metadata[to]': String(tenant?.to || ''),
+      'metadata[planKey]': String(plan?.key || ''),
+      'metadata[cadence]': selectedCadence,
+      'subscription_data[metadata][accountId]': String(tenant?.accountId || ''),
+      'subscription_data[metadata][to]': String(tenant?.to || ''),
+      'subscription_data[metadata][planKey]': String(plan?.key || ''),
+      'subscription_data[metadata][cadence]': selectedCadence
+    }
+  });
+  return {
+    id: String(parsed?.id || '').trim(),
+    url: String(parsed?.url || '').trim()
+  };
+}
+
 async function createPlatformStripeCustomer({ secretKey, account, tenant, billing }) {
   const details = billing?.details && typeof billing.details === 'object' ? billing.details : {};
   const businessName = String(details.companyName || account?.businessName || account?.workspace?.identity?.businessName || '').trim();
@@ -351,10 +393,9 @@ billingRouter.post('/billing/checkout', validateBody(checkoutSchema), async (req
     const { account } = getTenantAccount(data, tenant);
     const billing = account.billing || defaultAccountBilling();
     const fallbackReturnUrl = normalizeReturnUrl(req.body?.returnUrl);
-
-    if (billing.isLive === true && billing.portalUrl) {
-      return res.json({ ok: true, url: String(billing.portalUrl), source: 'stored_portal_url' });
-    }
+    const planKey = String(req.body?.planKey || billing?.plan?.key || 'pro').toLowerCase();
+    const plan = PLAN_CATALOG[planKey] || PLAN_CATALOG.pro;
+    const cadence = String(req.body?.cadence || 'monthly') === 'annual' ? 'annual' : 'monthly';
 
     const platformStripe = ensurePlatformStripeConfig(data);
     const secretKey = String(platformStripe.secretKey || '').trim();
@@ -366,42 +407,53 @@ billingRouter.post('/billing/checkout', validateBody(checkoutSchema), async (req
     if (!customerId) {
       customerId = await createPlatformStripeCustomer({ secretKey, account, tenant, billing });
     }
-    let sessionUrl = '';
+    let session = null;
     try {
-      sessionUrl = await createStripeBillingPortalSession({
+      session = await createStripeSubscriptionCheckoutSession({
         secretKey,
         customerId,
-        returnUrl: fallbackReturnUrl
+        plan,
+        cadence,
+        returnUrl: fallbackReturnUrl,
+        tenant
       });
     } catch (err) {
       const noSuchCustomer = String(err?.message || '').toLowerCase().includes('no such customer');
       if (!noSuchCustomer) throw err;
       customerId = await createPlatformStripeCustomer({ secretKey, account, tenant, billing });
-      sessionUrl = await createStripeBillingPortalSession({
+      session = await createStripeSubscriptionCheckoutSession({
         secretKey,
         customerId,
-        returnUrl: fallbackReturnUrl
+        plan,
+        cadence,
+        returnUrl: fallbackReturnUrl,
+        tenant
       });
     }
     account.billing = {
       ...billing,
       provider: 'stripe',
       isLive: true,
-      portalUrl: sessionUrl,
       platformStripeCustomerId: customerId,
+      pendingCheckout: {
+        sessionId: String(session?.id || ''),
+        planKey: plan.key,
+        cadence,
+        createdAt: Date.now()
+      },
       updatedAt: Date.now(),
       activity: [
         {
           id: `ba_${Date.now()}`,
           ts: Date.now(),
-          type: 'checkout_portal_created',
-          message: 'Billing renewal portal generated'
+          type: 'checkout_created',
+          message: `Stripe checkout started for ${plan.key} (${cadence})`
         },
         ...(Array.isArray(billing.activity) ? billing.activity : [])
       ].slice(0, 20)
     };
     saveDataDebounced(data);
-    return res.json({ ok: true, url: sessionUrl, source: 'stripe_billing_portal' });
+    return res.json({ ok: true, url: session?.url || '', sessionId: session?.id || '', source: 'stripe_checkout' });
   } catch (err) {
     return res.status(err?.status || 400).json({ error: err?.message || 'Failed to create checkout session' });
   }

@@ -83,6 +83,26 @@ function trimText(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
+function inferPublicBaseUrl(req) {
+  const forwardedProto = String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHost = String(req?.headers?.['x-forwarded-host'] || '').split(',')[0].trim();
+  const proto = forwardedProto || String(req?.protocol || 'http');
+  const host = forwardedHost || String(req?.get?.('host') || req?.headers?.host || '');
+  return `${proto}://${host}`.replace(/\/+$/, '');
+}
+
+function parseServiceAmount(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const matches = raw.match(/\d+(?:\.\d{1,2})?/g);
+  if (!matches || !matches.length) return null;
+  const nums = matches
+    .map((x) => Number(x))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (!nums.length) return null;
+  return Math.round((nums[nums.length - 1] + Number.EPSILON) * 100) / 100;
+}
+
 function buildServiceRequired(item) {
   const service = trimText(item?.serviceName || item?.serviceId || 'Service request');
   const notes = trimText(item?.notes || '');
@@ -136,6 +156,8 @@ async function syncBookingToConversation({ accountId, to, account, item }) {
   const serviceRequired = lines[2];
   const summaryText = lines.join('\n');
   const bookingText = summaryText;
+  const configuredService = readWorkspaceServices(account || {})?.[String(item?.serviceId || '').trim()] || {};
+  const bookingAmount = parseServiceAmount(item?.amount || configuredService?.price);
   const inferredList = inferServicesFromWorkspace(account || {}, `${item?.serviceName || ''} ${item?.notes || ''}`);
   const servicesList = inferredList.slice(0, 5).map((x) => String(x.id));
   const servicesSummary = inferredList.slice(0, 5).map((x) => `- ${x.name}`).join('\n');
@@ -155,6 +177,7 @@ async function syncBookingToConversation({ accountId, to, account, item }) {
     customerName: String(item?.customerName || '').trim(),
     customerPhone: String(from),
     customerEmail: String(item?.customerEmail || '').trim(),
+    amount: bookingAmount,
     notes: summaryText,
     appendMessage: true,
     messageText: bookingText,
@@ -164,7 +187,8 @@ async function syncBookingToConversation({ accountId, to, account, item }) {
   let invoiceSync = {
     ok: false,
     pdf: { generated: false, url: '', error: 'not_attempted' },
-    email: { attempted: 0, delivered: 0, failed: 0, provider: '', firstError: '' }
+    email: { attempted: 0, delivered: 0, failed: 0, provider: '', firstError: '' },
+    payment: { available: false, provider: '', status: '', url: '', amountCents: 0, currency: 'usd', reason: 'not_attempted' }
   };
   try {
     const invoiceResult = await ensureInvoiceForBookedConversation({
@@ -174,7 +198,8 @@ async function syncBookingToConversation({ accountId, to, account, item }) {
       bookingStart: Number(item?.start || Date.now()),
       bookingEnd: Number(item?.end || (Date.now() + 60 * 60 * 1000)),
       bookingId: String(item?.id || ''),
-      source: 'public_booking'
+      source: 'public_booking',
+      customerPaymentReturnUrl: String(item?.customerPaymentReturnUrl || '')
     });
     if (invoiceResult && typeof invoiceResult === 'object') {
       invoiceSync = {
@@ -192,6 +217,15 @@ async function syncBookingToConversation({ accountId, to, account, item }) {
           failed: Number(invoiceResult?.email?.failed || 0),
           provider: String(invoiceResult?.email?.provider || ''),
           firstError: String(invoiceResult?.email?.firstError || '')
+        },
+        payment: {
+          available: invoiceResult?.payment?.available === true,
+          provider: String(invoiceResult?.payment?.provider || ''),
+          status: String(invoiceResult?.payment?.status || ''),
+          url: String(invoiceResult?.payment?.url || ''),
+          amountCents: Number(invoiceResult?.payment?.amountCents || 0),
+          currency: String(invoiceResult?.payment?.currency || 'usd'),
+          reason: String(invoiceResult?.payment?.reason || '')
         }
       };
     }
@@ -490,6 +524,8 @@ publicBookingRouter.post('/booking/:token/book', validateParams(bookingTokenPara
     createdAt: Date.now(),
     source: 'public_booking'
   };
+  const manageUrl = `/book/${encodeURIComponent(String(req.params?.token || ''))}?manage=${encodeURIComponent(item.manageToken)}`;
+  item.customerPaymentReturnUrl = `${inferPublicBaseUrl(req)}${manageUrl}`;
   account.internalBookings.push(item);
   account.internalBookings = account.internalBookings.slice(-5000);
   saveDataDebounced(data);
@@ -516,7 +552,6 @@ publicBookingRouter.post('/booking/:token/book', validateParams(bookingTokenPara
     } catch (err) {
       console.error('public booking conversation sync failed:', err?.message || err);
     }
-    const manageUrl = `/book/${encodeURIComponent(String(req.params?.token || ''))}?manage=${encodeURIComponent(item.manageToken)}`;
     return res.json({
       ok: true,
       booking: item,
@@ -524,7 +559,6 @@ publicBookingRouter.post('/booking/:token/book', validateParams(bookingTokenPara
       invoice: syncResult?.invoiceSync || null
     });
   }
-  const manageUrl = `/book/${encodeURIComponent(String(req.params?.token || ''))}?manage=${encodeURIComponent(item.manageToken)}`;
   return res.json({ ok: true, booking: item, manageUrl, invoice: null });
 });
 

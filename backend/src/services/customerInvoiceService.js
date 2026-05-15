@@ -197,6 +197,107 @@ function renderUsdFromCents(cents) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number.isFinite(amount) ? amount : 0);
 }
 
+function stripeAuthHeader(secretKey) {
+  const token = Buffer.from(`${String(secretKey || '').trim()}:`, 'utf8').toString('base64');
+  return `Basic ${token}`;
+}
+
+async function stripeRequest(secretKey, path, { method = 'GET', form = null } = {}) {
+  const body = form ? new URLSearchParams(form).toString() : undefined;
+  const res = await fetch(`https://api.stripe.com${path}`, {
+    method,
+    headers: {
+      Authorization: stripeAuthHeader(secretKey),
+      Accept: 'application/json',
+      ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {})
+    },
+    body
+  });
+  const raw = await res.text();
+  let parsed = {};
+  try { parsed = JSON.parse(raw); } catch {}
+  if (!res.ok) {
+    const detail = String(parsed?.error?.message || parsed?.message || '').trim();
+    throw new Error(detail || `Stripe request failed (${res.status})`);
+  }
+  return parsed;
+}
+
+function resolveTenantStripeConfig(account) {
+  const cfg = account?.integrations?.stripe && typeof account.integrations.stripe === 'object'
+    ? account.integrations.stripe
+    : {};
+  const secretKey = String(cfg.secretKey || '').trim();
+  if (cfg.enabled !== true || !secretKey) return null;
+  if (!/^sk_(test|live)_[A-Za-z0-9]+$/.test(secretKey)) return null;
+  return cfg;
+}
+
+function appendUrlParams(url, params = {}) {
+  const parsed = new URL(String(url || 'http://127.0.0.1:3001'));
+  for (const [key, value] of Object.entries(params)) {
+    parsed.searchParams.set(key, String(value || ''));
+  }
+  return parsed.toString();
+}
+
+async function ensureStripeCheckoutForCustomerInvoice({
+  account,
+  invoice,
+  accountId,
+  to,
+  returnUrl = ''
+}) {
+  const amountCents = Math.max(0, Math.round(Number(invoice?.amountCents || 0)));
+  if (!amountCents) return { available: false, reason: 'missing_amount' };
+  if (String(invoice?.paymentStatus || '').toLowerCase() === 'paid') {
+    return { available: false, reason: 'already_paid' };
+  }
+  const cfg = resolveTenantStripeConfig(account);
+  if (!cfg) return { available: false, reason: 'stripe_not_connected' };
+  if (invoice?.payment?.provider === 'stripe_checkout' && String(invoice?.payment?.url || '').trim()) {
+    return { available: true, payment: invoice.payment };
+  }
+
+  const base = String(CAL_OAUTH_REDIRECT_BASE || '').replace(/\/$/, '') || 'http://127.0.0.1:3001';
+  const fallbackReturn = `${base}/api/public/invoice/${encodeURIComponent(String(invoice?.pdfToken || ''))}/pdf`;
+  const redirectBase = String(returnUrl || '').trim() || fallbackReturn;
+  const successUrl = appendUrlParams(redirectBase, { payment: 'success', invoice: String(invoice?.id || '') });
+  const cancelUrl = appendUrlParams(redirectBase, { payment: 'cancel', invoice: String(invoice?.id || '') });
+  const customerEmail = String(invoice?.email || '').trim().toLowerCase();
+
+  const session = await stripeRequest(cfg.secretKey, '/v1/checkout/sessions', {
+    method: 'POST',
+    form: {
+      mode: 'payment',
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      ...(customerEmail ? { customer_email: customerEmail } : {}),
+      'line_items[0][quantity]': '1',
+      'line_items[0][price_data][currency]': 'usd',
+      'line_items[0][price_data][unit_amount]': String(amountCents),
+      'line_items[0][price_data][product_data][name]': String(invoice?.service || 'Service booking').trim() || 'Service booking',
+      'metadata[accountId]': String(accountId || ''),
+      'metadata[to]': String(to || ''),
+      'metadata[invoiceId]': String(invoice?.id || ''),
+      'metadata[invoiceNumber]': String(invoice?.invoiceNumber || ''),
+      'metadata[conversationId]': String(invoice?.conversationId || '')
+    }
+  });
+
+  invoice.payment = {
+    provider: 'stripe_checkout',
+    status: 'open',
+    checkoutSessionId: String(session?.id || ''),
+    url: String(session?.url || ''),
+    amountCents,
+    currency: 'usd',
+    createdAt: Date.now()
+  };
+  invoice.updatedAt = Date.now();
+  return { available: true, payment: invoice.payment };
+}
+
 function escapePdfText(value) {
   return String(value || '')
     .replace(/\\/g, '\\\\')
@@ -512,7 +613,8 @@ async function ensureInvoiceForBookedConversation({
   bookingStart = 0,
   bookingEnd = 0,
   bookingId = '',
-  source = 'booking'
+  source = 'booking',
+  customerPaymentReturnUrl = ''
 }) {
   const data = loadData();
   const accountRef = getAccountById(data, accountId);
@@ -597,6 +699,21 @@ async function ensureInvoiceForBookedConversation({
   let emailDelivery = null;
   const base = String(CAL_OAUTH_REDIRECT_BASE || '').replace(/\/$/, '') || '';
   const pdfUrl = `${base}/api/public/invoice/${encodeURIComponent(String(invoice.pdfToken || ''))}/pdf`;
+  let paymentLink = { available: false, reason: 'not_attempted' };
+  try {
+    paymentLink = await ensureStripeCheckoutForCustomerInvoice({
+      account,
+      invoice,
+      accountId,
+      to,
+      returnUrl: customerPaymentReturnUrl
+    });
+  } catch (err) {
+    paymentLink = { available: false, reason: String(err?.message || 'stripe_checkout_failed') };
+    invoice.paymentLastError = paymentLink.reason;
+    invoice.updatedAt = Date.now();
+  }
+
   if (customerEmail && !invoice.emailSentAt) {
     const businessName = String(account?.workspace?.identity?.businessName || account?.businessName || 'Business').trim();
     const identity = account?.workspace?.identity && typeof account.workspace.identity === 'object'
@@ -620,8 +737,10 @@ async function ensureInvoiceForBookedConversation({
       `Amount: ${renderUsdFromCents(Number(invoice.amountCents || 0))}`,
       `Booked: ${new Date(Number(invoice.bookedAt || Date.now())).toLocaleString()}`,
       '',
+      invoice?.payment?.url ? `Pay securely by card: ${invoice.payment.url}` : '',
+      invoice?.payment?.url ? '' : '',
       `Download your invoice PDF: ${pdfUrl}`
-    ].join('\n');
+    ].filter((line, index, arr) => line !== '' || arr[index - 1] !== '').join('\n');
     try {
       const delivery = await sendEmailCampaign({
         subject,
@@ -678,7 +797,16 @@ async function ensureInvoiceForBookedConversation({
       url: pdfUrl,
       error: pdfError
     },
-    email: emailDelivery
+    email: emailDelivery,
+    payment: {
+      available: paymentLink.available === true,
+      reason: String(paymentLink.reason || ''),
+      provider: String(invoice?.payment?.provider || ''),
+      status: String(invoice?.payment?.status || invoice?.paymentStatus || ''),
+      url: String(invoice?.payment?.url || ''),
+      amountCents: Number(invoice?.payment?.amountCents || invoice?.amountCents || 0),
+      currency: String(invoice?.payment?.currency || 'usd')
+    }
   };
 }
 

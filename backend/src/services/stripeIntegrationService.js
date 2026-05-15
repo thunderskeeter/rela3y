@@ -328,6 +328,33 @@ function upsertInvoice(account, invoice) {
   return next;
 }
 
+function applyCustomerCheckoutSession(account, session) {
+  const metadata = session?.metadata && typeof session.metadata === 'object' ? session.metadata : {};
+  const invoiceId = String(metadata.invoiceId || '').trim();
+  if (!invoiceId) return null;
+  account.customerBilling = account.customerBilling && typeof account.customerBilling === 'object'
+    ? account.customerBilling
+    : {};
+  account.customerBilling.invoices = Array.isArray(account.customerBilling.invoices)
+    ? account.customerBilling.invoices
+    : [];
+  const invoice = account.customerBilling.invoices.find((inv) => String(inv?.id || '') === invoiceId);
+  if (!invoice) return null;
+  const paid = String(session?.payment_status || '').toLowerCase() === 'paid'
+    || String(session?.status || '').toLowerCase() === 'complete';
+  invoice.payment = invoice.payment && typeof invoice.payment === 'object' ? invoice.payment : {};
+  invoice.payment.provider = 'stripe_checkout';
+  invoice.payment.checkoutSessionId = String(session?.id || invoice.payment.checkoutSessionId || '');
+  invoice.payment.paymentIntentId = String(session?.payment_intent || invoice.payment.paymentIntentId || '');
+  invoice.payment.status = paid ? 'paid' : String(session?.payment_status || session?.status || 'open');
+  invoice.payment.paidAt = paid ? Date.now() : (invoice.payment.paidAt || null);
+  invoice.paymentStatus = paid ? 'paid' : invoice.payment.status;
+  invoice.paymentMethod = 'card';
+  invoice.status = paid ? 'close' : (invoice.status || 'booked');
+  invoice.updatedAt = Date.now();
+  return invoice;
+}
+
 function applyStripeWebhookEventForTo(to, event) {
   const tenantTo = String(to || '').trim();
   if (!tenantTo) throw new Error('Missing tenant number');
@@ -376,6 +403,13 @@ function applyStripeWebhookEventForTo(to, event) {
       billing.dunning.lockedAt = Date.now();
     }
     message = `Subscription ${normalized}`;
+  }
+
+  if (type === 'checkout.session.completed') {
+    const updated = applyCustomerCheckoutSession(account, obj);
+    if (updated) {
+      message = `Customer invoice ${String(updated.invoiceNumber || updated.id)} paid`;
+    }
   }
 
   billing.activity = [
