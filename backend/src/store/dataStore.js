@@ -461,6 +461,9 @@ function ensureDevSettings(data) {
   const platformBillingStripe = current.platformBillingStripe && typeof current.platformBillingStripe === 'object'
     ? current.platformBillingStripe
     : {};
+  const platformTwilio = current.platformTwilio && typeof current.platformTwilio === 'object'
+    ? current.platformTwilio
+    : {};
   data.dev = {
     enabled: typeof current.enabled === 'boolean' ? current.enabled : DEV_MODE,
     autoCreateTenants: typeof current.autoCreateTenants === 'boolean' ? current.autoCreateTenants : DEV_MODE,
@@ -478,6 +481,17 @@ function ensureDevSettings(data) {
       lastTestedAt: platformBillingStripe.lastTestedAt ? Number(platformBillingStripe.lastTestedAt) : null,
       lastStatus: platformBillingStripe.lastStatus ? String(platformBillingStripe.lastStatus) : null,
       lastError: platformBillingStripe.lastError ? String(platformBillingStripe.lastError) : null
+    },
+    platformTwilio: {
+      enabled: platformTwilio.enabled === true,
+      accountSid: String(platformTwilio.accountSid || ''),
+      apiKeySid: String(platformTwilio.apiKeySid || ''),
+      apiKeySecret: String(platformTwilio.apiKeySecret || ''),
+      webhookAuthToken: String(platformTwilio.webhookAuthToken || ''),
+      connectedAt: platformTwilio.connectedAt ? Number(platformTwilio.connectedAt) : null,
+      lastTestedAt: platformTwilio.lastTestedAt ? Number(platformTwilio.lastTestedAt) : null,
+      lastStatus: platformTwilio.lastStatus ? String(platformTwilio.lastStatus) : null,
+      lastError: platformTwilio.lastError ? String(platformTwilio.lastError) : null
     }
   };
 }
