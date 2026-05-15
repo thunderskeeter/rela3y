@@ -22041,39 +22041,13 @@ window.addEventListener("DOMContentLoaded", () => {
   function bindArcDock() {
     if (!arcDock || arcDock.dataset.bound === "true") return;
     arcDock.dataset.bound = "true";
-    const supportsHover = !!window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-    if (supportsHover) {
-      arcDock.classList.remove("is-open");
-      arcDock.addEventListener("mouseenter", () => {
-        if (arcDock.classList.contains("force-closed")) return;
-        arcDock.classList.add("is-open");
-      });
-      arcDock.addEventListener("mouseleave", () => {
-        arcDock.classList.remove("is-open");
-        arcDock.classList.remove("force-closed");
-      });
-      return;
-    }
     arcDock.classList.remove("is-open");
-    arcDockHandle?.addEventListener("click", () => {
+    arcDockHandle?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       arcDock.classList.remove("force-closed");
       arcDock.classList.toggle("is-open");
     });
-
-    let startY = null;
-    arcDock.addEventListener("touchstart", (e) => {
-      const t = e.changedTouches && e.changedTouches[0];
-      startY = t ? t.clientY : null;
-    }, { passive: true });
-    arcDock.addEventListener("touchend", (e) => {
-      if (startY == null) return;
-      const t = e.changedTouches && e.changedTouches[0];
-      const endY = t ? t.clientY : startY;
-      const delta = startY - endY;
-      if (delta > 18) arcDock.classList.add("is-open");
-      if (delta < -18) arcDock.classList.remove("is-open");
-      startY = null;
-    }, { passive: true });
 
     document.addEventListener("click", (e) => {
       if (!arcDock.classList.contains("is-open")) return;

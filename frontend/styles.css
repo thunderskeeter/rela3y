@@ -1103,16 +1103,12 @@ html[data-theme="light"] .toolname{
   transition: transform .28s var(--ease), opacity .2s ease;
 }
 
-.arc-dock:hover .arc-dock-tray,
-.arc-dock:focus-within .arc-dock-tray,
 .arc-dock.is-open .arc-dock-tray{
   transform: translateY(0) scale(1);
   opacity: 1;
 }
 
-.arc-dock.force-closed .arc-dock-tray,
-.arc-dock.force-closed:hover .arc-dock-tray,
-.arc-dock.force-closed:focus-within .arc-dock-tray{
+.arc-dock.force-closed .arc-dock-tray{
   transform: translateY(32px) scale(0.96);
   opacity: 0;
 }
