@@ -13719,8 +13719,8 @@ function viewSettings(){
         </div>
         <div style="height:10px;"></div>
         <div class="card" style="background:var(--panel);">
-          <div class="h1" style="margin:0;">Buy + Assign Twilio Number (Superadmin)</div>
-          <div class="p">Search available numbers from the connected platform Twilio account, then purchase and attach to the selected workspace.</div>
+          <div class="h1" style="margin:0;">Find Twilio Numbers (Superadmin)</div>
+          <div class="p">Search real Twilio availability, open Twilio to buy, then refresh purchased numbers above and assign after the number exists in your Twilio account.</div>
           <div style="height:8px;"></div>
           <div class="grid2">
             <div class="col">
@@ -20686,7 +20686,7 @@ function viewSettings(){
             <td>${escapeHtml(String(row?.phoneNumber || "--"))}</td>
             <td>${escapeHtml(String(location || "--"))}</td>
             <td>${escapeHtml(String(capText || "--"))}</td>
-            <td><button class="btn primary" type="button" data-superadmin-buy-number="${idx}">Buy + Assign</button></td>
+            <td><button class="btn primary" type="button" data-superadmin-open-twilio-number="${idx}">Open in Twilio</button></td>
           </tr>
         `;
       }).join("");
@@ -20725,26 +20725,13 @@ function viewSettings(){
       }
     }
 
-    async function buyAndAssignSuperadminNumber(index) {
-      const accountId = String(superadminTwilioAccountSelect?.value || "").trim();
+    function openTwilioNumberPurchase(index) {
       const row = Array.isArray(superadminAvailableNumbers) ? superadminAvailableNumbers[index] : null;
-      if (!accountId || !row?.phoneNumber) return;
-      const label = String(superadminNumberPurchaseLabel?.value || "").trim();
-      const webhookBaseUrl = String(superadminNumberWebhookBaseUrl?.value || "").trim();
-      try {
-        if (superadminNumberSearchStatus) superadminNumberSearchStatus.textContent = `Purchasing ${row.phoneNumber}...`;
-        await apiPost(`/api/admin/developer/twilio/${encodeURIComponent(accountId)}/purchase-number`, {
-          phoneNumber: String(row.phoneNumber),
-          label,
-          setPrimary: true,
-          webhookBaseUrl
-        });
-        if (superadminNumberSearchStatus) superadminNumberSearchStatus.textContent = `Purchased and assigned ${row.phoneNumber}.`;
-        showSettingsToast(`Purchased ${row.phoneNumber} and assigned to workspace`);
-        await refreshSuperadminOps();
-      } catch (err) {
-        if (superadminNumberSearchStatus) superadminNumberSearchStatus.textContent = err?.message || "Purchase failed";
-        showSettingsToast("Failed to purchase number", true);
+      if (!row?.phoneNumber) return;
+      const url = "https://console.twilio.com/us1/develop/phone-numbers/manage/search";
+      window.open(url, "_blank", "noopener,noreferrer");
+      if (superadminNumberSearchStatus) {
+        superadminNumberSearchStatus.textContent = `Opened Twilio Console. Buy ${row.phoneNumber} there, then refresh purchased numbers above to assign it.`;
       }
     }
 
@@ -20897,11 +20884,11 @@ function viewSettings(){
     superadminOpsRefreshBtn?.addEventListener("click", refreshSuperadminOps);
     superadminNumberSearchBtn?.addEventListener("click", searchSuperadminAvailableNumbers);
     superadminNumberSearchResultsBody?.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-superadmin-buy-number]");
+      const btn = e.target.closest("[data-superadmin-open-twilio-number]");
       if (!btn) return;
-      const idx = Number(btn.getAttribute("data-superadmin-buy-number"));
+      const idx = Number(btn.getAttribute("data-superadmin-open-twilio-number"));
       if (!Number.isFinite(idx)) return;
-      buyAndAssignSuperadminNumber(idx);
+      openTwilioNumberPurchase(idx);
     });
 
     superadminPlatformStripeSaveBtn?.addEventListener("click", async () => {
