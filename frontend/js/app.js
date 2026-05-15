@@ -13448,6 +13448,58 @@ function viewSettings(){
 
       <div style="height:14px;"></div>
 
+      <div class="card developer-admin-card" id="platformUsersPanel">
+        <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+          <div class="col" style="gap:4px;">
+            <div class="h1" style="margin:0;">Users</div>
+            <div class="p">Platform users, account assignments, assigned phone numbers, roles, and subscription status.</div>
+          </div>
+          <div class="row platform-users-tabs" role="tablist" aria-label="User billing filters">
+            <button class="btn is-active" type="button" data-platform-users-filter="all">All</button>
+            <button class="btn" type="button" data-platform-users-filter="paid">Paid</button>
+            <button class="btn" type="button" data-platform-users-filter="unpaid">Unpaid</button>
+          </div>
+        </div>
+        <div style="height:10px;"></div>
+        <div class="grid3 platform-users-metrics">
+          <div class="card" style="background:var(--panel);">
+            <div class="p">Users</div>
+            <div class="h1" id="platformUsersCount" style="margin:0;">0</div>
+          </div>
+          <div class="card" style="background:var(--panel);">
+            <div class="p">Paid accounts</div>
+            <div class="h1" id="platformUsersPaidCount" style="margin:0;">0</div>
+          </div>
+          <div class="card" style="background:var(--panel);">
+            <div class="p">Unpaid accounts</div>
+            <div class="h1" id="platformUsersUnpaidCount" style="margin:0;">0</div>
+          </div>
+        </div>
+        <div style="height:10px;"></div>
+        <div class="billing-table-wrap platform-users-table-wrap">
+          <table class="billing-table platform-users-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Account</th>
+                <th>Phone number</th>
+                <th>Billing</th>
+                <th>Login</th>
+              </tr>
+            </thead>
+            <tbody id="platformUsersTableBody"></tbody>
+          </table>
+        </div>
+        <div style="height:10px;"></div>
+        <div class="row" style="justify-content:flex-end; gap:8px;">
+          <div class="p" id="platformUsersSummary" style="min-height:18px; margin-right:auto;">Loading users...</div>
+          <button class="btn" id="platformUsersRefreshBtn" type="button">Refresh users</button>
+        </div>
+      </div>
+
+      <div style="height:14px;"></div>
+
       <div class="card">
         <div class="h1" style="margin:0;">Phone Numbers</div>
         <div class="p">Manage inbound business numbers and set a primary routing number.</div>
@@ -20097,6 +20149,14 @@ function viewSettings(){
     const superadminPlatformStripeSaveBtn = document.getElementById("superadminPlatformStripeSaveBtn");
     const superadminPlatformStripeTestBtn = document.getElementById("superadminPlatformStripeTestBtn");
     const superadminPlatformStripeDisconnectBtn = document.getElementById("superadminPlatformStripeDisconnectBtn");
+    const platformUsersPanel = document.getElementById("platformUsersPanel");
+    const platformUsersFilterBtns = Array.from(wrap.querySelectorAll("[data-platform-users-filter]"));
+    const platformUsersCount = document.getElementById("platformUsersCount");
+    const platformUsersPaidCount = document.getElementById("platformUsersPaidCount");
+    const platformUsersUnpaidCount = document.getElementById("platformUsersUnpaidCount");
+    const platformUsersTableBody = document.getElementById("platformUsersTableBody");
+    const platformUsersSummary = document.getElementById("platformUsersSummary");
+    const platformUsersRefreshBtn = document.getElementById("platformUsersRefreshBtn");
     const superadminTwilioInventorySummary = document.getElementById("superadminTwilioInventorySummary");
     const superadminTwilioInventoryBody = document.getElementById("superadminTwilioInventoryBody");
     const superadminTwilioInventoryError = document.getElementById("superadminTwilioInventoryError");
@@ -20126,6 +20186,8 @@ function viewSettings(){
     let superadminOpsState = { workspaces: [] };
     let superadminAvailableNumbers = [];
     let superadminPlatformStripeState = null;
+    let platformUsersFilter = "all";
+    let platformUsersState = { users: [], workspaces: [] };
 
     function formatMoneyFromMonthly(monthlyPrice) {
       return Number(monthlyPrice || 0).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -20162,6 +20224,119 @@ function viewSettings(){
         superadminPlatformStripeWebhookSecretInput.placeholder = stripe.webhookSecretMasked
           ? `Saved (${stripe.webhookSecretMasked})`
           : "whsec_...";
+      }
+    }
+
+    function isPaidPlatformBilling(billing) {
+      const bl = billing && typeof billing === "object" ? billing : {};
+      const status = String(bl.planStatus || bl.status || "").toLowerCase();
+      return bl.isLive === true || ["active", "trialing", "paid"].includes(status);
+    }
+
+    function platformUserRows(users, workspaces) {
+      const workspaceList = Array.isArray(workspaces) ? workspaces : [];
+      const workspaceById = new Map(workspaceList.map((w) => [String(w?.accountId || ""), w]));
+      const rows = [];
+      for (const user of Array.isArray(users) ? users : []) {
+        const role = String(user?.role || "agent").toLowerCase();
+        const accountIds = Array.isArray(user?.accountIds) ? user.accountIds.map((x) => String(x || "").trim()).filter(Boolean) : [];
+        if (role === "superadmin" && accountIds.length === 0) {
+          rows.push({ user, role, account: null, platformScope: true, paid: null });
+          continue;
+        }
+        if (!accountIds.length) {
+          rows.push({ user, role, account: null, platformScope: false, paid: false });
+          continue;
+        }
+        for (const accountId of accountIds) {
+          const account = workspaceById.get(accountId) || {
+            accountId,
+            businessName: "Unknown account",
+            numbers: [],
+            billing: { planName: "Unknown", planStatus: "unpaid", isLive: false }
+          };
+          rows.push({ user, role, account, platformScope: false, paid: isPaidPlatformBilling(account.billing) });
+        }
+      }
+      return rows;
+    }
+
+    function renderPlatformUsers(payload = {}) {
+      const users = Array.isArray(payload.users) ? payload.users : platformUsersState.users;
+      const workspaces = Array.isArray(payload.workspaces) ? payload.workspaces : platformUsersState.workspaces;
+      platformUsersState = { users, workspaces };
+
+      if (String(authState?.user?.role || "").toLowerCase() !== "superadmin") {
+        if (platformUsersPanel) platformUsersPanel.style.display = "none";
+        return;
+      }
+      if (platformUsersPanel) platformUsersPanel.style.display = "";
+
+      const rows = platformUserRows(users, workspaces);
+      const accountRows = rows.filter((r) => r.account && !r.platformScope);
+      const paidAccounts = workspaces.filter((w) => isPaidPlatformBilling(w?.billing)).length;
+      const unpaidAccounts = workspaces.filter((w) => !isPaidPlatformBilling(w?.billing)).length;
+      if (platformUsersCount) platformUsersCount.textContent = String(users.length);
+      if (platformUsersPaidCount) platformUsersPaidCount.textContent = String(paidAccounts);
+      if (platformUsersUnpaidCount) platformUsersUnpaidCount.textContent = String(unpaidAccounts);
+
+      platformUsersFilterBtns.forEach((btn) => {
+        const active = String(btn.getAttribute("data-platform-users-filter") || "all") === platformUsersFilter;
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-selected", active ? "true" : "false");
+      });
+
+      const filtered = rows.filter((row) => {
+        if (platformUsersFilter === "paid") return row.paid === true;
+        if (platformUsersFilter === "unpaid") return row.paid === false;
+        return true;
+      });
+
+      if (platformUsersTableBody) {
+        if (!filtered.length) {
+          platformUsersTableBody.innerHTML = `<tr><td colspan="6" class="billing-empty-row">No users match this filter.</td></tr>`;
+        } else {
+          platformUsersTableBody.innerHTML = filtered.map((row) => {
+            const user = row.user || {};
+            const account = row.account || {};
+            const billing = account.billing || {};
+            const numbers = Array.isArray(account.numbers) ? account.numbers : [];
+            const status = row.platformScope
+              ? "all accounts"
+              : String(billing.planStatus || "unpaid").toLowerCase();
+            const statusClass = row.platformScope
+              ? "is-active"
+              : (row.paid ? "is-paid" : "is-past_due");
+            const accountText = row.platformScope
+              ? "All accounts"
+              : `${account.businessName || "Unassigned"}${account.accountId ? ` (${account.accountId})` : ""}`;
+            const phoneText = row.platformScope
+              ? "All assigned numbers"
+              : (numbers.join(", ") || account.to || "Unassigned");
+            const loginText = user.lastLoginAt ? formatSyncTs(user.lastLoginAt) : "Never";
+            const disabledText = user.disabled ? `<span class="billing-status-pill is-canceled">Disabled</span>` : "";
+            return `
+              <tr>
+                <td>
+                  <b>${escapeHtml(user.email || "--")}</b>
+                  <div class="p">${escapeHtml(user.id || "")}</div>
+                  ${disabledText}
+                </td>
+                <td><span class="billing-status-pill is-active">${escapeHtml(row.role || "agent")}</span></td>
+                <td>${escapeHtml(accountText)}</td>
+                <td>${escapeHtml(phoneText)}</td>
+                <td><span class="billing-status-pill ${escapeAttr(statusClass)}">${escapeHtml(status.replace("_", " "))}</span><div class="p">${escapeHtml(billing.planName || "")}</div></td>
+                <td>${escapeHtml(loginText)}</td>
+              </tr>
+            `;
+          }).join("");
+        }
+      }
+
+      if (platformUsersSummary) {
+        const shown = filtered.length;
+        const assigned = accountRows.length;
+        platformUsersSummary.textContent = `${shown} row${shown === 1 ? "" : "s"} shown | ${assigned} account assignment${assigned === 1 ? "" : "s"} | ${workspaces.length} account${workspaces.length === 1 ? "" : "s"}`;
       }
     }
 
@@ -20402,12 +20577,17 @@ function viewSettings(){
     async function refreshSuperadminOps() {
       if (String(authState?.user?.role || "").toLowerCase() !== "superadmin") {
         if (superadminOpsPanel) superadminOpsPanel.style.display = "none";
+        renderPlatformUsers({ users: [], workspaces: [] });
         await refreshSuperadminPlatformStripe();
         return;
       }
       if (superadminOpsPanel) superadminOpsPanel.style.display = "";
       try {
-        let overview = await apiGet("/api/admin/developer/ops-overview");
+        const [overviewRes, usersRes] = await Promise.all([
+          apiGet("/api/admin/developer/ops-overview"),
+          apiGet("/api/admin/users")
+        ]);
+        let overview = overviewRes;
         const rows = Array.isArray(overview?.workspaces) ? overview.workspaces : [];
         if (!rows.length) {
           const accountsRes = await apiGet("/api/admin/accounts");
@@ -20449,15 +20629,26 @@ function viewSettings(){
             }))
           };
         }
+        adminUsersCache = Array.isArray(usersRes?.users) ? usersRes.users : [];
+        applyAdminUserSelect(adminUsersCache);
         renderSuperadminOpsView(overview || {});
+        renderPlatformUsers({ users: adminUsersCache, workspaces: Array.isArray(overview?.workspaces) ? overview.workspaces : [] });
         await refreshSuperadminPlatformStripe();
         await refreshSuperadminTwilioInventory();
       } catch (err) {
         if (superadminTwilioActionStatus) superadminTwilioActionStatus.textContent = err?.message || "Failed to load overview";
+        if (platformUsersSummary) platformUsersSummary.textContent = err?.message || "Failed to load users";
         if (superadminTwilioInventoryError) superadminTwilioInventoryError.textContent = "";
       }
     }
 
+    platformUsersFilterBtns.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        platformUsersFilter = String(btn.getAttribute("data-platform-users-filter") || "all");
+        renderPlatformUsers(platformUsersState);
+      });
+    });
+    platformUsersRefreshBtn?.addEventListener("click", refreshSuperadminOps);
     superadminTwilioAccountSelect?.addEventListener("change", renderSuperadminTwilioEditor);
     superadminTwilioAccountSelect?.addEventListener("change", () => {
       superadminAvailableNumbers = [];
