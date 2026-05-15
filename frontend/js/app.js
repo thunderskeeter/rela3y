@@ -20162,7 +20162,7 @@ function viewSettings(){
     }
 
     async function refreshSuperadminPlatformStripe() {
-      if (String(authState?.user?.role || "").toLowerCase() !== "superadmin") return;
+      if (!canAccessDeveloperTools()) return;
       try {
         const res = await apiGet("/api/dev/platform-billing/stripe");
         renderSuperadminPlatformStripe(res?.stripe || {});
@@ -20398,6 +20398,7 @@ function viewSettings(){
     async function refreshSuperadminOps() {
       if (String(authState?.user?.role || "").toLowerCase() !== "superadmin") {
         if (superadminOpsPanel) superadminOpsPanel.style.display = "none";
+        await refreshSuperadminPlatformStripe();
         return;
       }
       if (superadminOpsPanel) superadminOpsPanel.style.display = "";

@@ -1,5 +1,5 @@
 const express = require('express');
-const { getDevSettings, updateDevSettings, updateConversation, loadData, saveDataDebounced, upsertContact } = require('../store/dataStore');
+const { getDevSettings, updateDevSettings, updateConversation, loadData, saveDataDebounced, flushDataNow, upsertContact } = require('../store/dataStore');
 const { createLeadEvent, evaluateOpportunity, getConversationEvents } = require('../services/revenueIntelligenceService');
 const { handleSignal } = require('../services/revenueOrchestrator');
 const { runPassiveRevenueMonitoring, runReactivationScan } = require('../services/passiveRevenueMonitoring');
@@ -176,6 +176,7 @@ devRouter.put('/dev/platform-billing/stripe', validateBody(platformStripeConnect
       lastError: null
     };
     saveDataDebounced(data);
+    await flushDataNow();
     return res.json({ ok: true, stripe: platformStripeSnapshot(data.dev.platformBillingStripe) });
   } catch (err) {
     data.dev.platformBillingStripe = {
@@ -189,6 +190,7 @@ devRouter.put('/dev/platform-billing/stripe', validateBody(platformStripeConnect
       lastError: String(err?.message || 'Stripe authentication failed')
     };
     saveDataDebounced(data);
+    await flushDataNow();
     return res.status(400).json({ error: err?.message || 'Failed to connect platform Stripe' });
   }
 });
@@ -211,6 +213,7 @@ devRouter.post('/dev/platform-billing/stripe/test', validateBody(noBodySchema), 
       lastError: null
     };
     saveDataDebounced(data);
+    await flushDataNow();
     return res.json({ ok: true, accountId: tested.accountId || '', stripe: platformStripeSnapshot(data.dev.platformBillingStripe) });
   } catch (err) {
     data.dev.platformBillingStripe = {
@@ -221,11 +224,12 @@ devRouter.post('/dev/platform-billing/stripe/test', validateBody(noBodySchema), 
       lastError: String(err?.message || 'Stripe test failed')
     };
     saveDataDebounced(data);
+    await flushDataNow();
     return res.status(400).json({ error: err?.message || 'Stripe test failed' });
   }
 });
 
-devRouter.delete('/dev/platform-billing/stripe', validateBody(noBodySchema), (_req, res) => {
+devRouter.delete('/dev/platform-billing/stripe', validateBody(noBodySchema), async (_req, res) => {
   const data = loadData();
   const cfg = ensurePlatformStripeConfig(data);
   data.dev.platformBillingStripe = {
@@ -243,6 +247,7 @@ devRouter.delete('/dev/platform-billing/stripe', validateBody(noBodySchema), (_r
     lastError: null
   };
   saveDataDebounced(data);
+  await flushDataNow();
   return res.json({ ok: true, stripe: platformStripeSnapshot(data.dev.platformBillingStripe) });
 });
 
