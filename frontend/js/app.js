@@ -13403,17 +13403,50 @@ function viewSettings(){
         </div>
       </div>
 
-        <div style="height:14px;"></div>
+      <div style="height:14px;"></div>
 
-      <div class="card">
-        <div class="h1" style="margin:0;">Simulate Conversation</div>
-        <div class="p">Generate a mock detailing conversation so you can inspect the AI replies without using real leads.</div>
+      <div class="card developer-admin-card" id="arcRelayStripePanel">
+        <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+          <div class="col" style="gap:4px;">
+            <div class="h1" style="margin:0;">Arc Relay Stripe</div>
+            <div class="p">Platform billing for Arc Relay subscriptions only. Client service payments stay in each workspace Integrations tab.</div>
+          </div>
+          <span class="badge">Owner billing</span>
+        </div>
         <div style="height:10px;"></div>
-        <div class="row" style="justify-content:flex-end; gap:8px;">
-          <div class="p developer-status" id="simulateConversationStatus" style="min-height:18px; margin-right:auto;"></div>
-          <button class="btn primary" id="simulateConversationBtn" type="button">Simulate Conversation</button>
+        <div class="grid2">
+          <div class="col">
+            <label class="p">Secret Key (sk_...)</label>
+            <input class="input" id="superadminPlatformStripeSecretKeyInput" type="password" placeholder="sk_live_..." />
+          </div>
+          <div class="col">
+            <label class="p">Publishable Key (optional)</label>
+            <input class="input" id="superadminPlatformStripePublishableKeyInput" placeholder="pk_live_..." />
+          </div>
+        </div>
+        <div style="height:8px;"></div>
+        <div class="grid2">
+          <div class="col">
+            <label class="p">Webhook Secret</label>
+            <input class="input" id="superadminPlatformStripeWebhookSecretInput" type="password" placeholder="whsec_..." />
+          </div>
+          <div class="col">
+            <label class="p">Status</label>
+            <div class="badge" id="superadminPlatformStripeStatusBadge">Not connected</div>
+          </div>
+        </div>
+        <div style="height:8px;"></div>
+        <div class="p" id="superadminPlatformStripeDetails">Not connected</div>
+        <div style="height:10px;"></div>
+        <div class="row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+          <div class="p" id="superadminPlatformStripeActionStatus" style="min-height:18px; margin-right:auto;"></div>
+          <button class="btn" id="superadminPlatformStripeTestBtn" type="button">Test</button>
+          <button class="btn" id="superadminPlatformStripeDisconnectBtn" type="button">Disconnect</button>
+          <button class="btn primary" id="superadminPlatformStripeSaveBtn" type="button">Save Arc Relay Stripe</button>
         </div>
       </div>
+
+      <div style="height:14px;"></div>
 
       <div class="card">
         <div class="h1" style="margin:0;">Phone Numbers</div>
@@ -13550,43 +13583,6 @@ function viewSettings(){
             <tbody id="superadminOpsTableBody"></tbody>
           </table>
         </div>
-        <div style="height:10px;"></div>
-        <div class="card" style="background:var(--panel);">
-          <div class="h1" style="margin:0;">Platform Stripe (Superadmin Billing)</div>
-          <div class="p">This Stripe connection is for dashboard subscription renewal only. Client booking Stripe stays in each workspace Integrations tab.</div>
-          <div style="height:8px;"></div>
-          <div class="grid2">
-            <div class="col">
-              <label class="p">Secret Key (sk_...)</label>
-              <input class="input" id="superadminPlatformStripeSecretKeyInput" type="password" placeholder="sk_live_..." />
-            </div>
-            <div class="col">
-              <label class="p">Publishable Key (optional)</label>
-              <input class="input" id="superadminPlatformStripePublishableKeyInput" placeholder="pk_live_..." />
-            </div>
-          </div>
-          <div style="height:8px;"></div>
-          <div class="grid2">
-            <div class="col">
-              <label class="p">Webhook Secret (optional)</label>
-              <input class="input" id="superadminPlatformStripeWebhookSecretInput" type="password" placeholder="whsec_..." />
-            </div>
-            <div class="col">
-              <label class="p">Status</label>
-              <div class="badge" id="superadminPlatformStripeStatusBadge">Not connected</div>
-            </div>
-          </div>
-          <div style="height:8px;"></div>
-          <div class="p" id="superadminPlatformStripeDetails">Not connected</div>
-          <div style="height:10px;"></div>
-          <div class="row" style="justify-content:flex-end; gap:8px; flex-wrap:wrap;">
-            <div class="p" id="superadminPlatformStripeActionStatus" style="min-height:18px; margin-right:auto;"></div>
-            <button class="btn" id="superadminPlatformStripeTestBtn" type="button">Test</button>
-            <button class="btn" id="superadminPlatformStripeDisconnectBtn" type="button">Disconnect</button>
-            <button class="btn primary" id="superadminPlatformStripeSaveBtn" type="button">Save Platform Stripe</button>
-          </div>
-        </div>
-        <div style="height:10px;"></div>
         <div class="card" style="background:var(--panel);">
           <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
             <div class="col" style="gap:4px;">
@@ -13738,69 +13734,6 @@ function viewSettings(){
         </div>
       </div>
 
-      <div style="height:14px;"></div>
-
-      <!-- Webhook Simulator -->
-      <div class="card developer-webhook-card">
-        <div class="row" style="justify-content:space-between; flex-wrap:wrap;">
-          <div class="col" style="gap:4px;">
-            <div class="h1" style="margin:0;">Webhook Simulator</div>
-            <div class="p">Send test events to your local backend (no curl).</div>
-          </div>
-          <span class="badge">DEV</span>
-        </div>
-
-        <div style="height:12px;"></div>
-
-        <div class="grid2">
-          <div class="col">
-            <label class="p">Account "To" number</label>
-            <select class="select" id="simTo">
-              <option value="+18145550001">Detailer (To: +18145550001)</option>
-              <option value="+18145550002">Mechanic (To: +18145550002)</option>
-              <option value="__custom__">Custom number...</option>
-            </select>
-            <div id="simToCustomWrap" class="col hidden" style="gap:6px; margin-top:8px;">
-              <input class="input" id="simToCustom" type="text" placeholder="+18145550003" />
-              <div id="simToCustomError" class="p hidden" style="color:#d97373; margin:0;">Enter a valid E.164 US number (+1XXXXXXXXXX).</div>
-            </div>
-          </div>
-
-          <div class="col">
-            <label class="p">Event type</label>
-            <select class="select" id="simType">
-              <option value="missed-call">Missed Call</option>
-              <option value="sms">Inbound SMS</option>
-            </select>
-          </div>
-        </div>
-
-        <div style="height:10px;"></div>
-
-        <div class="grid2">
-          <div class="col">
-            <label class="p">From (customer number)</label>
-            <input class="input" id="simFrom" value="+18145559999" />
-          </div>
-
-          <div class="col" id="bodyWrap">
-            <label class="p">Body (text message)</label>
-            <input class="input" id="simBody" value="I want a detail on my truck" />
-          </div>
-        </div>
-
-        <div style="height:10px;"></div>
-
-        <div class="row" style="justify-content:flex-end;">
-          <button class="btn" id="simClear" type="button">Clear</button>
-          <button class="btn primary" id="simSend" type="button">Send</button>
-        </div>
-
-        <div style="height:12px;"></div>
-
-        <div class="p">Response</div>
-        <pre id="simOut" class="developer-output"></pre>
-      </div>
     </section>
   `;
 
@@ -14055,7 +13988,6 @@ function viewSettings(){
         ["callRoutingSaveBtn", {}],
         ["billingDetailsSaveBtn", { sticky: true }],
         ["devSettingsSaveBtn", {}],
-        ["simulateConversationBtn", {}],
         ["workspaceSaveNumbersBtn", {}],
         ["adminQuickCreateBtn", {}],
         ["adminResetPasswordBtn", {}],
