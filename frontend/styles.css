@@ -9776,25 +9776,25 @@ select.select{
 
 @media (max-width: 1180px){
   .topbar{
-    min-height:116px;
+    min-height:84px;
   }
 
   .topbar-shell{
-    min-height:116px;
+    min-height:84px;
     grid-template-columns:minmax(96px, 1fr) auto minmax(96px, 1fr) !important;
-    grid-template-rows:64px auto;
-    gap:0 8px;
+    grid-template-rows:1fr;
+    gap:8px;
     align-items:center;
-    padding-block:8px 10px;
+    padding-block:0;
   }
 
   .topbar-left{
-    grid-column:1 / -1;
-    grid-row:2;
-    justify-self:center;
-    width:100%;
+    grid-column:1;
+    grid-row:1;
+    justify-self:start;
+    width:auto;
     display:flex;
-    justify-content:center;
+    justify-content:flex-start;
   }
 
   .topbar-center{
@@ -9814,12 +9814,12 @@ select.select{
 
   .topbar-recovery-strip{
     display:grid;
-    grid-template-columns:repeat(3, minmax(0, auto));
-    justify-content:center;
-    align-items:center;
-    gap:8px 14px;
-    width:min(100%, 720px);
-    min-width:0;
+    grid-template-columns:1fr;
+    justify-content:start;
+    align-items:start;
+    gap:2px;
+    width:auto;
+    min-width:260px;
     padding:7px 12px;
   }
 
