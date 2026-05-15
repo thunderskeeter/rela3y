@@ -9842,6 +9842,24 @@ select.select{
     padding-block:6px 10px;
   }
 
+  .topbar-left{
+    grid-column:1 / -1;
+    grid-row:2;
+    justify-self:center;
+    width:100%;
+    justify-content:center;
+  }
+
+  .topbar-center{
+    grid-column:2;
+    grid-row:1;
+  }
+
+  .topbar-right{
+    grid-column:3;
+    grid-row:1;
+  }
+
   .topbar-logo-btn{
     min-height:44px;
     padding:2px 4px;
