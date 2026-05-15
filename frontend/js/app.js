@@ -20422,7 +20422,7 @@ function viewSettings(){
       const errors = Array.isArray(payload.errors) ? payload.errors : [];
       platformTwilioState = { twilio, workspaces, numbers };
 
-      const connected = twilio.enabled === true && String(twilio.lastStatus || "").toLowerCase() !== "error";
+      const connected = twilio.enabled === true;
       if (platformTwilioStatusBadge) {
         platformTwilioStatusBadge.textContent = connected ? "Connected" : "Not connected";
         platformTwilioStatusBadge.className = `platform-stripe-status ${connected ? "is-connected" : "is-disconnected"}`;
@@ -20867,7 +20867,11 @@ function viewSettings(){
       try {
         if (platformTwilioSaveBtn) platformTwilioSaveBtn.disabled = true;
         if (platformTwilioConnectStatus) platformTwilioConnectStatus.textContent = "Connecting Twilio...";
-        await apiPut("/api/dev/platform-twilio", payload);
+        const saved = await apiPut("/api/dev/platform-twilio", payload);
+        renderPlatformTwilioInventory({
+          ...platformTwilioState,
+          twilio: saved?.twilio || platformTwilioState.twilio || {}
+        });
         if (platformTwilioConnectStatus) platformTwilioConnectStatus.textContent = "Twilio connected.";
         showSettingsToast("Twilio connected");
         platformTwilioConnectCard?.classList.add("hidden");

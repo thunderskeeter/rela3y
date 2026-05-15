@@ -34,9 +34,9 @@ const platformStripeConnectSchema = z.object({
   webhookSecret: z.string().trim().max(256).optional().default('')
 });
 const platformTwilioConnectSchema = z.object({
-  accountSid: z.string().trim().min(10).max(128),
-  apiKeySid: z.string().trim().min(10).max(128),
-  apiKeySecret: z.string().trim().min(8).max(256),
+  accountSid: z.string().trim().max(128).optional().default(''),
+  apiKeySid: z.string().trim().max(128).optional().default(''),
+  apiKeySecret: z.string().trim().max(256).optional().default(''),
   webhookAuthToken: z.string().trim().max(256).optional().default('')
 });
 const platformTwilioAssignSchema = z.object({
@@ -354,13 +354,20 @@ devRouter.get('/dev/platform-twilio', (_req, res) => {
 devRouter.put('/dev/platform-twilio', validateBody(platformTwilioConnectSchema), async (req, res) => {
   const data = loadData();
   const cfg = ensurePlatformTwilioConfig(data);
+  const accountSid = String(req.body?.accountSid || '').trim() || String(cfg.accountSid || '').trim();
+  const apiKeySid = String(req.body?.apiKeySid || '').trim() || String(cfg.apiKeySid || '').trim();
+  const apiKeySecret = String(req.body?.apiKeySecret || '').trim() || String(cfg.apiKeySecret || '').trim();
+  const webhookAuthToken = String(req.body?.webhookAuthToken || '').trim() || String(cfg.webhookAuthToken || '').trim();
+  if (!accountSid || !apiKeySid || !apiKeySecret) {
+    return res.status(400).json({ error: 'Twilio Account SID, API Key SID, and API Key Secret are required' });
+  }
   const next = {
     ...cfg,
     enabled: true,
-    accountSid: String(req.body?.accountSid || '').trim(),
-    apiKeySid: String(req.body?.apiKeySid || '').trim(),
-    apiKeySecret: String(req.body?.apiKeySecret || '').trim(),
-    webhookAuthToken: String(req.body?.webhookAuthToken || '').trim(),
+    accountSid,
+    apiKeySid,
+    apiKeySecret,
+    webhookAuthToken,
     connectedAt: cfg.connectedAt || Date.now(),
     lastTestedAt: Date.now(),
     lastStatus: 'ok',
@@ -373,12 +380,18 @@ devRouter.put('/dev/platform-twilio', validateBody(platformTwilioConnectSchema),
     await flushDataNow();
     return res.json({ ok: true, twilio: platformTwilioSnapshot(next) });
   } catch (err) {
-    data.dev.platformTwilio = {
-      ...next,
-      enabled: false,
-      lastStatus: 'error',
-      lastError: String(err?.message || 'Twilio authentication failed')
-    };
+    if (cfg.enabled === true && cfg.accountSid && cfg.apiKeySid && cfg.apiKeySecret) {
+      cfg.lastTestedAt = Date.now();
+      cfg.lastError = String(err?.message || 'Twilio authentication failed');
+      data.dev.platformTwilio = cfg;
+    } else {
+      data.dev.platformTwilio = {
+        ...next,
+        enabled: false,
+        lastStatus: 'error',
+        lastError: String(err?.message || 'Twilio authentication failed')
+      };
+    }
     saveDataDebounced(data);
     await flushDataNow();
     return res.status(400).json({ error: err?.message || 'Failed to connect Twilio' });
@@ -392,11 +405,18 @@ devRouter.get('/dev/platform-twilio/inventory', async (_req, res) => {
     return res.json({ ok: true, asOf: Date.now(), ...inventory });
   } catch (err) {
     const cfg = ensurePlatformTwilioConfig(data);
-    cfg.lastStatus = 'error';
     cfg.lastError = String(err?.message || 'Failed to load Twilio inventory');
     saveDataDebounced(data);
     await flushDataNow();
-    return res.status(400).json({ error: err?.message || 'Failed to load Twilio inventory' });
+    return res.json({
+      ok: true,
+      asOf: Date.now(),
+      twilio: platformTwilioSnapshot(cfg),
+      workspaces: listDeveloperWorkspaces(data),
+      summary: { twilioNumberCount: 0, assignedCount: 0, unassignedCount: 0 },
+      numbers: [],
+      errors: [{ error: err?.message || 'Failed to load Twilio inventory' }]
+    });
   }
 });
 
