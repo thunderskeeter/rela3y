@@ -13500,27 +13500,85 @@ function viewSettings(){
 
       <div style="height:14px;"></div>
 
-      <div class="card">
-        <div class="h1" style="margin:0;">Phone Numbers</div>
-        <div class="p">Manage inbound business numbers and set a primary routing number.</div>
-        <div style="height:10px;"></div>
-        <div id="workspaceNumbersList" class="col" style="gap:8px;"></div>
-        <div style="height:10px;"></div>
-        <div class="grid2">
-          <div class="col">
-            <label class="p">Add number (E.164)</label>
-            <input class="input" id="workspaceNewNumberInput" placeholder="+18145550003" />
+      <div class="card developer-admin-card" id="platformPhoneNumbersPanel">
+        <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+          <div class="col" style="gap:4px;">
+            <div class="h1" style="margin:0;">Phone Numbers</div>
+            <div class="p">Connect the Arc Relay Twilio account, view purchased numbers, and assign available numbers to client accounts.</div>
           </div>
-          <div class="col">
-            <label class="p">Label</label>
-            <input class="input" id="workspaceNewNumberLabelInput" placeholder="Support line" />
+          <div class="row" style="gap:8px; align-items:center;">
+            <span class="platform-stripe-status is-disconnected" id="platformTwilioStatusBadge" style="width:auto; min-width:150px;">Not connected</span>
+            <button class="btn" id="platformTwilioConnectToggleBtn" type="button">Connect Twilio</button>
           </div>
         </div>
         <div style="height:10px;"></div>
+        <div class="card platform-twilio-connect-card hidden" id="platformTwilioConnectCard" style="background:var(--panel);">
+          <div class="grid2">
+            <div class="col">
+              <label class="p">Account SID</label>
+              <input class="input" id="platformTwilioAccountSidInput" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+            </div>
+            <div class="col">
+              <label class="p">API Key SID</label>
+              <input class="input" id="platformTwilioApiKeySidInput" placeholder="SKxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+            </div>
+          </div>
+          <div style="height:8px;"></div>
+          <div class="grid2">
+            <div class="col">
+              <label class="p">API Key Secret</label>
+              <input class="input" id="platformTwilioApiKeySecretInput" type="password" placeholder="Twilio API key secret" />
+            </div>
+            <div class="col">
+              <label class="p">Webhook Auth Token</label>
+              <input class="input" id="platformTwilioWebhookTokenInput" type="password" placeholder="Optional but recommended" />
+            </div>
+          </div>
+          <div style="height:10px;"></div>
+          <div class="row" style="justify-content:flex-end; gap:8px;">
+            <div class="p" id="platformTwilioConnectStatus" style="min-height:18px; margin-right:auto;"></div>
+            <button class="btn primary" id="platformTwilioSaveBtn" type="button">Save Twilio Connection</button>
+          </div>
+        </div>
+        <div style="height:10px;"></div>
+        <div class="grid3 platform-users-metrics">
+          <div class="card" style="background:var(--panel);">
+            <div class="p">Purchased numbers</div>
+            <div class="h1" id="platformTwilioNumberCount" style="margin:0;">0</div>
+          </div>
+          <div class="card" style="background:var(--panel);">
+            <div class="p">Assigned</div>
+            <div class="h1" id="platformTwilioAssignedCount" style="margin:0;">0</div>
+          </div>
+          <div class="card" style="background:var(--panel);">
+            <div class="p">Unassigned</div>
+            <div class="h1" id="platformTwilioUnassignedCount" style="margin:0;">0</div>
+          </div>
+        </div>
+        <div style="height:10px;"></div>
+        <div class="billing-table-wrap platform-phone-table-wrap">
+          <table class="billing-table platform-phone-table">
+            <thead>
+              <tr>
+                <th>Number</th>
+                <th>Twilio name</th>
+                <th>Assigned account</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="platformTwilioNumbersBody"></tbody>
+          </table>
+        </div>
+        <div class="p" id="platformTwilioInventoryError" style="min-height:18px; margin-top:8px;"></div>
+        <div class="hidden" id="workspaceNumbersList"></div>
+        <input class="hidden" id="workspaceNewNumberInput" />
+        <input class="hidden" id="workspaceNewNumberLabelInput" />
         <div class="row" style="justify-content:flex-end; gap:8px;">
           <div class="p" id="workspaceNumbersStatus" style="min-height:18px; margin-right:auto;"></div>
-          <button class="btn" id="workspaceAddNumberBtn" type="button">Add number</button>
-          <button class="btn primary" id="workspaceSaveNumbersBtn" type="button">Save numbers</button>
+          <button class="btn hidden" id="workspaceAddNumberBtn" type="button">Add number</button>
+          <button class="btn hidden" id="workspaceSaveNumbersBtn" type="button">Save numbers</button>
+          <button class="btn primary" id="platformTwilioRefreshBtn" type="button">Refresh numbers</button>
         </div>
       </div>
 
@@ -20149,6 +20207,21 @@ function viewSettings(){
     const superadminPlatformStripeSaveBtn = document.getElementById("superadminPlatformStripeSaveBtn");
     const superadminPlatformStripeTestBtn = document.getElementById("superadminPlatformStripeTestBtn");
     const superadminPlatformStripeDisconnectBtn = document.getElementById("superadminPlatformStripeDisconnectBtn");
+    const platformTwilioStatusBadge = document.getElementById("platformTwilioStatusBadge");
+    const platformTwilioConnectToggleBtn = document.getElementById("platformTwilioConnectToggleBtn");
+    const platformTwilioConnectCard = document.getElementById("platformTwilioConnectCard");
+    const platformTwilioAccountSidInput = document.getElementById("platformTwilioAccountSidInput");
+    const platformTwilioApiKeySidInput = document.getElementById("platformTwilioApiKeySidInput");
+    const platformTwilioApiKeySecretInput = document.getElementById("platformTwilioApiKeySecretInput");
+    const platformTwilioWebhookTokenInput = document.getElementById("platformTwilioWebhookTokenInput");
+    const platformTwilioConnectStatus = document.getElementById("platformTwilioConnectStatus");
+    const platformTwilioSaveBtn = document.getElementById("platformTwilioSaveBtn");
+    const platformTwilioNumberCount = document.getElementById("platformTwilioNumberCount");
+    const platformTwilioAssignedCount = document.getElementById("platformTwilioAssignedCount");
+    const platformTwilioUnassignedCount = document.getElementById("platformTwilioUnassignedCount");
+    const platformTwilioNumbersBody = document.getElementById("platformTwilioNumbersBody");
+    const platformTwilioInventoryError = document.getElementById("platformTwilioInventoryError");
+    const platformTwilioRefreshBtn = document.getElementById("platformTwilioRefreshBtn");
     const platformUsersPanel = document.getElementById("platformUsersPanel");
     const platformUsersFilterBtns = Array.from(wrap.querySelectorAll("[data-platform-users-filter]"));
     const platformUsersCount = document.getElementById("platformUsersCount");
@@ -20188,6 +20261,7 @@ function viewSettings(){
     let superadminPlatformStripeState = null;
     let platformUsersFilter = "all";
     let platformUsersState = { users: [], workspaces: [] };
+    let platformTwilioState = { twilio: null, workspaces: [], numbers: [] };
 
     function formatMoneyFromMonthly(monthlyPrice) {
       return Number(monthlyPrice || 0).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -20337,6 +20411,118 @@ function viewSettings(){
         const shown = filtered.length;
         const assigned = accountRows.length;
         platformUsersSummary.textContent = `${shown} row${shown === 1 ? "" : "s"} shown | ${assigned} account assignment${assigned === 1 ? "" : "s"} | ${workspaces.length} account${workspaces.length === 1 ? "" : "s"}`;
+      }
+    }
+
+    function renderPlatformTwilioInventory(payload = {}) {
+      const twilio = payload.twilio && typeof payload.twilio === "object" ? payload.twilio : {};
+      const workspaces = Array.isArray(payload.workspaces) ? payload.workspaces : [];
+      const numbers = Array.isArray(payload.numbers) ? payload.numbers : [];
+      const summary = payload.summary || {};
+      const errors = Array.isArray(payload.errors) ? payload.errors : [];
+      platformTwilioState = { twilio, workspaces, numbers };
+
+      const connected = twilio.enabled === true && String(twilio.lastStatus || "").toLowerCase() !== "error";
+      if (platformTwilioStatusBadge) {
+        platformTwilioStatusBadge.textContent = connected ? "Connected" : "Not connected";
+        platformTwilioStatusBadge.className = `platform-stripe-status ${connected ? "is-connected" : "is-disconnected"}`;
+      }
+      if (platformTwilioConnectToggleBtn) {
+        platformTwilioConnectToggleBtn.textContent = connected ? "Edit Twilio" : "Connect Twilio";
+      }
+      if (platformTwilioAccountSidInput) platformTwilioAccountSidInput.value = "";
+      if (platformTwilioAccountSidInput) platformTwilioAccountSidInput.placeholder = twilio.accountSidMasked ? `Saved (${twilio.accountSidMasked})` : "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+      if (platformTwilioApiKeySidInput) platformTwilioApiKeySidInput.value = String(twilio.apiKeySid || "");
+      if (platformTwilioApiKeySecretInput) {
+        platformTwilioApiKeySecretInput.value = "";
+        platformTwilioApiKeySecretInput.placeholder = twilio.hasApiKeySecret ? "Saved (hidden). Enter new value to change." : "Twilio API key secret";
+      }
+      if (platformTwilioWebhookTokenInput) {
+        platformTwilioWebhookTokenInput.value = "";
+        platformTwilioWebhookTokenInput.placeholder = twilio.hasWebhookAuthToken ? "Saved (hidden). Enter new value to change." : "Optional but recommended";
+      }
+      if (platformTwilioNumberCount) platformTwilioNumberCount.textContent = String(Number(summary.twilioNumberCount || numbers.length || 0));
+      if (platformTwilioAssignedCount) platformTwilioAssignedCount.textContent = String(Number(summary.assignedCount || 0));
+      if (platformTwilioUnassignedCount) platformTwilioUnassignedCount.textContent = String(Number(summary.unassignedCount || 0));
+      if (numbersStatus) {
+        numbersStatus.textContent = connected
+          ? `${Number(summary.twilioNumberCount || numbers.length || 0)} purchased number${Number(summary.twilioNumberCount || numbers.length || 0) === 1 ? "" : "s"} loaded`
+          : "Connect Twilio to load purchased numbers.";
+      }
+
+      if (platformTwilioNumbersBody) {
+        if (!connected) {
+          platformTwilioNumbersBody.innerHTML = `<tr><td colspan="5" class="billing-empty-row">Connect Twilio to load purchased numbers.</td></tr>`;
+        } else if (!numbers.length) {
+          platformTwilioNumbersBody.innerHTML = `<tr><td colspan="5" class="billing-empty-row">No purchased Twilio numbers found.</td></tr>`;
+        } else {
+          const accountOptions = [
+            `<option value="">Unassigned</option>`,
+            ...workspaces.map((ws) => `<option value="${escapeAttr(ws.accountId || "")}">${escapeHtml(ws.businessName || "Workspace")} (${escapeHtml(ws.to || "--")})</option>`)
+          ].join("");
+          platformTwilioNumbersBody.innerHTML = numbers.map((row) => {
+            const assigned = Array.isArray(row.assignedWorkspaces) ? row.assignedWorkspaces : [];
+            const assignedAccountId = String(row.assignedAccountId || assigned[0]?.accountId || "");
+            const cap = row.capabilities && typeof row.capabilities === "object" ? row.capabilities : {};
+            const capText = [cap.voice ? "Voice" : null, cap.sms ? "SMS" : null, cap.mms ? "MMS" : null].filter(Boolean).join(", ") || "--";
+            return `
+              <tr>
+                <td><b>${escapeHtml(row.phoneNumber || "--")}</b><div class="p">${escapeHtml(capText)}</div></td>
+                <td>${escapeHtml(row.friendlyName || "--")}</td>
+                <td>
+                  <select class="select platform-twilio-account-select" data-platform-twilio-number="${escapeAttr(row.phoneNumber || "")}">
+                    ${accountOptions}
+                  </select>
+                </td>
+                <td><span class="billing-status-pill ${assignedAccountId ? "is-paid" : "is-past_due"}">${assignedAccountId ? "Assigned" : "Unassigned"}</span></td>
+                <td><button class="btn primary" type="button" data-platform-twilio-assign="${escapeAttr(row.phoneNumber || "")}">Save assignment</button></td>
+              </tr>
+            `;
+          }).join("");
+          platformTwilioNumbersBody.querySelectorAll(".platform-twilio-account-select").forEach((select) => {
+            const number = String(select.getAttribute("data-platform-twilio-number") || "");
+            const row = numbers.find((item) => String(item.phoneNumber || "") === number);
+            select.value = String(row?.assignedAccountId || row?.assignedWorkspaces?.[0]?.accountId || "");
+          });
+        }
+      }
+      if (platformTwilioInventoryError) {
+        platformTwilioInventoryError.textContent = errors.length
+          ? errors.map((err) => err?.error || "Twilio inventory error").join(" | ")
+          : "";
+      }
+    }
+
+    async function refreshPlatformTwilioInventory() {
+      if (!canAccessDeveloperTools()) return;
+      try {
+        const inventory = await apiGet("/api/dev/platform-twilio/inventory");
+        renderPlatformTwilioInventory(inventory || {});
+      } catch (err) {
+        if (numbersStatus) numbersStatus.textContent = err?.message || "Failed to load Twilio numbers";
+        if (platformTwilioInventoryError) platformTwilioInventoryError.textContent = err?.message || "Failed to load Twilio numbers";
+      }
+    }
+
+    async function assignPlatformTwilioNumber(phoneNumber) {
+      const number = String(phoneNumber || "").trim();
+      const select = Array.from(platformTwilioNumbersBody?.querySelectorAll(".platform-twilio-account-select") || [])
+        .find((el) => String(el.getAttribute("data-platform-twilio-number") || "") === number);
+      const accountId = String(select?.value || "").trim();
+      if (!number || !accountId) {
+        if (numbersStatus) numbersStatus.textContent = "Choose an account before saving assignment.";
+        return;
+      }
+      try {
+        if (numbersStatus) numbersStatus.textContent = `Assigning ${number}...`;
+        await apiPut("/api/dev/platform-twilio/assign", { phoneNumber: number, accountId, label: "Twilio", setPrimary: true });
+        if (numbersStatus) numbersStatus.textContent = `${number} assigned.`;
+        showSettingsToast("Phone number assigned");
+        await refreshPlatformTwilioInventory();
+        await refreshSuperadminOps();
+      } catch (err) {
+        if (numbersStatus) numbersStatus.textContent = err?.message || "Assignment failed";
+        showSettingsToast("Failed to assign number", true);
       }
     }
 
@@ -20587,6 +20773,7 @@ function viewSettings(){
           if (platformUsersSummary) platformUsersSummary.textContent = err?.message || "Failed to load users";
         }
         await refreshSuperadminPlatformStripe();
+        await refreshPlatformTwilioInventory();
         return;
       }
       if (superadminOpsPanel) superadminOpsPanel.style.display = "";
@@ -20645,6 +20832,7 @@ function viewSettings(){
           workspaces: Array.isArray(usersOverview?.workspaces) ? usersOverview.workspaces : []
         });
         await refreshSuperadminPlatformStripe();
+        await refreshPlatformTwilioInventory();
         await refreshSuperadminTwilioInventory();
       } catch (err) {
         if (superadminTwilioActionStatus) superadminTwilioActionStatus.textContent = err?.message || "Failed to load overview";
@@ -20660,6 +20848,42 @@ function viewSettings(){
       });
     });
     platformUsersRefreshBtn?.addEventListener("click", refreshSuperadminOps);
+    platformTwilioConnectToggleBtn?.addEventListener("click", () => {
+      platformTwilioConnectCard?.classList.toggle("hidden");
+    });
+    platformTwilioRefreshBtn?.addEventListener("click", refreshPlatformTwilioInventory);
+    platformTwilioSaveBtn?.addEventListener("click", async () => {
+      const existing = platformTwilioState.twilio || {};
+      const payload = {
+        accountSid: String(platformTwilioAccountSidInput?.value || "").trim(),
+        apiKeySid: String(platformTwilioApiKeySidInput?.value || "").trim(),
+        apiKeySecret: String(platformTwilioApiKeySecretInput?.value || "").trim(),
+        webhookAuthToken: String(platformTwilioWebhookTokenInput?.value || "").trim()
+      };
+      if (!payload.accountSid && existing.accountSidMasked) {
+        if (platformTwilioConnectStatus) platformTwilioConnectStatus.textContent = "Enter Account SID again to update the connection.";
+        return;
+      }
+      try {
+        if (platformTwilioSaveBtn) platformTwilioSaveBtn.disabled = true;
+        if (platformTwilioConnectStatus) platformTwilioConnectStatus.textContent = "Connecting Twilio...";
+        await apiPut("/api/dev/platform-twilio", payload);
+        if (platformTwilioConnectStatus) platformTwilioConnectStatus.textContent = "Twilio connected.";
+        showSettingsToast("Twilio connected");
+        platformTwilioConnectCard?.classList.add("hidden");
+        await refreshPlatformTwilioInventory();
+      } catch (err) {
+        if (platformTwilioConnectStatus) platformTwilioConnectStatus.textContent = err?.message || "Twilio connect failed";
+        showSettingsToast("Failed to connect Twilio", true);
+      } finally {
+        if (platformTwilioSaveBtn) platformTwilioSaveBtn.disabled = false;
+      }
+    });
+    platformTwilioNumbersBody?.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-platform-twilio-assign]");
+      if (!btn) return;
+      assignPlatformTwilioNumber(btn.getAttribute("data-platform-twilio-assign"));
+    });
     superadminTwilioAccountSelect?.addEventListener("change", renderSuperadminTwilioEditor);
     superadminTwilioAccountSelect?.addEventListener("change", () => {
       superadminAvailableNumbers = [];

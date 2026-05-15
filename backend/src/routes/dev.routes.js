@@ -1,5 +1,5 @@
 const express = require('express');
-const { getDevSettings, updateDevSettings, updateConversation, loadData, saveDataDebounced, flushDataNow, upsertContact } = require('../store/dataStore');
+const { getDevSettings, updateDevSettings, updateConversation, loadData, saveDataDebounced, flushDataNow, upsertContact, getAccountById } = require('../store/dataStore');
 const { createLeadEvent, evaluateOpportunity, getConversationEvents } = require('../services/revenueIntelligenceService');
 const { handleSignal } = require('../services/revenueOrchestrator');
 const { runPassiveRevenueMonitoring, runReactivationScan } = require('../services/passiveRevenueMonitoring');
@@ -32,6 +32,18 @@ const platformStripeConnectSchema = z.object({
   secretKey: z.string().trim().max(256).optional().default(''),
   publishableKey: z.string().trim().max(256).optional().default(''),
   webhookSecret: z.string().trim().max(256).optional().default('')
+});
+const platformTwilioConnectSchema = z.object({
+  accountSid: z.string().trim().min(10).max(128),
+  apiKeySid: z.string().trim().min(10).max(128),
+  apiKeySecret: z.string().trim().min(8).max(256),
+  webhookAuthToken: z.string().trim().max(256).optional().default('')
+});
+const platformTwilioAssignSchema = z.object({
+  phoneNumber: z.string().trim().regex(/^\+[1-9]\d{1,14}$/),
+  accountId: z.string().trim().min(1).max(80),
+  label: z.string().trim().max(64).optional().default('Twilio'),
+  setPrimary: z.boolean().optional().default(true)
 });
 const noBodySchema = z.object({}).strict().optional().default({});
 
@@ -117,6 +129,136 @@ function collectAccountNumbers(account, to) {
   return [...new Set(out)];
 }
 
+function normalizePhone(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const hasPlus = raw.startsWith('+');
+  const digits = raw.replace(/[^\d]/g, '');
+  return hasPlus ? `+${digits}` : digits;
+}
+
+function ensurePlatformTwilioConfig(data) {
+  data.dev = data.dev && typeof data.dev === 'object' ? data.dev : {};
+  const current = data.dev.platformTwilio && typeof data.dev.platformTwilio === 'object'
+    ? data.dev.platformTwilio
+    : {};
+  data.dev.platformTwilio = {
+    enabled: current.enabled === true,
+    accountSid: String(current.accountSid || '').trim(),
+    apiKeySid: String(current.apiKeySid || '').trim(),
+    apiKeySecret: String(current.apiKeySecret || '').trim(),
+    webhookAuthToken: String(current.webhookAuthToken || '').trim(),
+    connectedAt: current.connectedAt ? Number(current.connectedAt) : null,
+    lastTestedAt: current.lastTestedAt ? Number(current.lastTestedAt) : null,
+    lastStatus: current.lastStatus ? String(current.lastStatus) : null,
+    lastError: current.lastError ? String(current.lastError) : null
+  };
+  return data.dev.platformTwilio;
+}
+
+function platformTwilioSnapshot(cfg) {
+  const current = cfg && typeof cfg === 'object' ? cfg : {};
+  return {
+    enabled: current.enabled === true,
+    accountSidMasked: current.accountSid ? maskSecret(current.accountSid) : '',
+    apiKeySid: String(current.apiKeySid || ''),
+    hasApiKeySecret: Boolean(String(current.apiKeySecret || '').trim()),
+    hasWebhookAuthToken: Boolean(String(current.webhookAuthToken || '').trim()),
+    connectedAt: current.connectedAt ? Number(current.connectedAt) : null,
+    lastTestedAt: current.lastTestedAt ? Number(current.lastTestedAt) : null,
+    lastStatus: current.lastStatus ? String(current.lastStatus) : null,
+    lastError: current.lastError ? String(current.lastError) : null
+  };
+}
+
+async function listTwilioIncomingNumbers({ accountSid, apiKeySid, apiKeySecret }) {
+  const auth = Buffer.from(`${apiKeySid}:${apiKeySecret}`, 'utf8').toString('base64');
+  const all = [];
+  let nextPath = `/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/IncomingPhoneNumbers.json?PageSize=100`;
+  let safety = 0;
+  while (nextPath && safety < 20) {
+    safety += 1;
+    const response = await fetch(`https://api.twilio.com${nextPath}`, {
+      method: 'GET',
+      headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' }
+    });
+    const raw = await response.text();
+    let parsed = {};
+    try { parsed = JSON.parse(raw); } catch {}
+    if (!response.ok) {
+      const detail = String(parsed?.message || parsed?.detail || '').trim();
+      throw new Error(detail || `Twilio number inventory failed (${response.status})`);
+    }
+    const rows = Array.isArray(parsed?.incoming_phone_numbers) ? parsed.incoming_phone_numbers : [];
+    for (const row of rows) {
+      all.push({
+        sid: String(row?.sid || ''),
+        phoneNumber: normalizePhone(row?.phone_number || ''),
+        friendlyName: String(row?.friendly_name || ''),
+        capabilities: row?.capabilities && typeof row.capabilities === 'object' ? row.capabilities : {}
+      });
+    }
+    nextPath = parsed?.next_page_uri ? String(parsed.next_page_uri) : '';
+  }
+  return all.filter((row) => row.phoneNumber);
+}
+
+function listDeveloperWorkspaces(data) {
+  return buildDeveloperUsersOverview(data).workspaces || [];
+}
+
+function getAssignedWorkspacesForNumber(data, phoneNumber) {
+  const normalized = normalizePhone(phoneNumber);
+  const out = [];
+  for (const [to, account] of Object.entries(data.accounts || {})) {
+    if (!account || typeof account !== 'object') continue;
+    const accountId = String(account.accountId || account.id || '').trim();
+    if (!accountId) continue;
+    const numbers = collectAccountNumbers(account, to).map(normalizePhone).filter(Boolean);
+    if (!numbers.includes(normalized)) continue;
+    out.push({
+      accountId,
+      to: String(to),
+      businessName: String(account.businessName || account?.workspace?.identity?.businessName || '').trim() || 'Workspace'
+    });
+  }
+  return out;
+}
+
+async function buildPlatformTwilioInventory(data) {
+  const cfg = ensurePlatformTwilioConfig(data);
+  const workspaces = listDeveloperWorkspaces(data);
+  if (!cfg.enabled || !cfg.accountSid || !cfg.apiKeySid || !cfg.apiKeySecret) {
+    return {
+      twilio: platformTwilioSnapshot(cfg),
+      workspaces,
+      summary: { twilioNumberCount: 0, assignedCount: 0, unassignedCount: 0 },
+      numbers: [],
+      errors: cfg.lastError ? [{ error: cfg.lastError }] : []
+    };
+  }
+  const numbers = await listTwilioIncomingNumbers(cfg);
+  const rows = numbers.map((row) => {
+    const assignedWorkspaces = getAssignedWorkspacesForNumber(data, row.phoneNumber);
+    return {
+      ...row,
+      assignedWorkspaces,
+      assignedAccountId: assignedWorkspaces[0]?.accountId || ''
+    };
+  }).sort((a, b) => String(a.phoneNumber).localeCompare(String(b.phoneNumber)));
+  return {
+    twilio: platformTwilioSnapshot(cfg),
+    workspaces,
+    summary: {
+      twilioNumberCount: rows.length,
+      assignedCount: rows.filter((row) => row.assignedWorkspaces.length > 0).length,
+      unassignedCount: rows.filter((row) => row.assignedWorkspaces.length === 0).length
+    },
+    numbers: rows,
+    errors: []
+  };
+}
+
 function buildDeveloperUsersOverview(data) {
   const users = Array.isArray(data?.users)
     ? data.users.map(sanitizeUser).filter(Boolean)
@@ -200,6 +342,126 @@ devRouter.get('/dev/platform-billing/stripe', (_req, res) => {
 devRouter.get('/dev/users-overview', (_req, res) => {
   const data = loadData();
   return res.json({ ok: true, ...buildDeveloperUsersOverview(data) });
+});
+
+devRouter.get('/dev/platform-twilio', (_req, res) => {
+  const data = loadData();
+  const cfg = ensurePlatformTwilioConfig(data);
+  saveDataDebounced(data);
+  return res.json({ ok: true, twilio: platformTwilioSnapshot(cfg) });
+});
+
+devRouter.put('/dev/platform-twilio', validateBody(platformTwilioConnectSchema), async (req, res) => {
+  const data = loadData();
+  const cfg = ensurePlatformTwilioConfig(data);
+  const next = {
+    ...cfg,
+    enabled: true,
+    accountSid: String(req.body?.accountSid || '').trim(),
+    apiKeySid: String(req.body?.apiKeySid || '').trim(),
+    apiKeySecret: String(req.body?.apiKeySecret || '').trim(),
+    webhookAuthToken: String(req.body?.webhookAuthToken || '').trim(),
+    connectedAt: cfg.connectedAt || Date.now(),
+    lastTestedAt: Date.now(),
+    lastStatus: 'ok',
+    lastError: null
+  };
+  try {
+    await listTwilioIncomingNumbers(next);
+    data.dev.platformTwilio = next;
+    saveDataDebounced(data);
+    await flushDataNow();
+    return res.json({ ok: true, twilio: platformTwilioSnapshot(next) });
+  } catch (err) {
+    data.dev.platformTwilio = {
+      ...next,
+      enabled: false,
+      lastStatus: 'error',
+      lastError: String(err?.message || 'Twilio authentication failed')
+    };
+    saveDataDebounced(data);
+    await flushDataNow();
+    return res.status(400).json({ error: err?.message || 'Failed to connect Twilio' });
+  }
+});
+
+devRouter.get('/dev/platform-twilio/inventory', async (_req, res) => {
+  const data = loadData();
+  try {
+    const inventory = await buildPlatformTwilioInventory(data);
+    return res.json({ ok: true, asOf: Date.now(), ...inventory });
+  } catch (err) {
+    const cfg = ensurePlatformTwilioConfig(data);
+    cfg.lastStatus = 'error';
+    cfg.lastError = String(err?.message || 'Failed to load Twilio inventory');
+    saveDataDebounced(data);
+    await flushDataNow();
+    return res.status(400).json({ error: err?.message || 'Failed to load Twilio inventory' });
+  }
+});
+
+devRouter.put('/dev/platform-twilio/assign', validateBody(platformTwilioAssignSchema), async (req, res) => {
+  const data = loadData();
+  const phoneNumber = normalizePhone(req.body?.phoneNumber);
+  const accountId = String(req.body?.accountId || '').trim();
+  const label = String(req.body?.label || 'Twilio').trim() || 'Twilio';
+  const setPrimary = req.body?.setPrimary !== false;
+  const found = getAccountById(data, accountId);
+  if (!found?.account) return res.status(404).json({ error: 'Account not found' });
+
+  const platformTwilio = ensurePlatformTwilioConfig(data);
+  if (!platformTwilio.enabled) return res.status(400).json({ error: 'Connect platform Twilio before assigning numbers' });
+
+  for (const account of Object.values(data.accounts || {})) {
+    if (!account || typeof account !== 'object') continue;
+    account.workspace = account.workspace && typeof account.workspace === 'object' ? account.workspace : {};
+    account.workspace.phoneNumbers = Array.isArray(account.workspace.phoneNumbers) ? account.workspace.phoneNumbers : [];
+    account.workspace.phoneNumbers = account.workspace.phoneNumbers.filter((row) => normalizePhone(row?.number) !== phoneNumber);
+    if (!account.workspace.phoneNumbers.some((row) => row?.isPrimary === true) && account.workspace.phoneNumbers[0]) {
+      account.workspace.phoneNumbers[0].isPrimary = true;
+    }
+    if (normalizePhone(account?.integrations?.twilio?.phoneNumber) === phoneNumber) {
+      account.integrations.twilio.phoneNumber = '';
+    }
+  }
+
+  const account = found.account;
+  account.workspace = account.workspace && typeof account.workspace === 'object' ? account.workspace : {};
+  account.workspace.phoneNumbers = Array.isArray(account.workspace.phoneNumbers) ? account.workspace.phoneNumbers : [];
+  account.workspace.phoneNumbers.push({ number: phoneNumber, label, isPrimary: setPrimary });
+  if (setPrimary) {
+    for (const row of account.workspace.phoneNumbers) {
+      row.isPrimary = normalizePhone(row?.number) === phoneNumber;
+    }
+  } else if (!account.workspace.phoneNumbers.some((row) => row.isPrimary === true)) {
+    account.workspace.phoneNumbers[0].isPrimary = true;
+  }
+
+  account.integrations = account.integrations && typeof account.integrations === 'object' ? account.integrations : {};
+  account.integrations.twilio = {
+    ...(account.integrations.twilio && typeof account.integrations.twilio === 'object' ? account.integrations.twilio : {}),
+    enabled: true,
+    accountSid: platformTwilio.accountSid,
+    apiKeySid: platformTwilio.apiKeySid,
+    apiKeySecret: platformTwilio.apiKeySecret,
+    webhookAuthToken: platformTwilio.webhookAuthToken,
+    phoneNumber,
+    lastStatus: 'assigned',
+    lastTestedAt: Date.now()
+  };
+
+  saveDataDebounced(data);
+  await flushDataNow();
+  return res.json({
+    ok: true,
+    assignment: {
+      phoneNumber,
+      accountId,
+      to: String(found.to || ''),
+      businessName: String(account.businessName || account?.workspace?.identity?.businessName || '').trim() || 'Workspace'
+    },
+    inventory: await buildPlatformTwilioInventory(data)
+  });
 });
 
 devRouter.put('/dev/platform-billing/stripe', validateBody(platformStripeConnectSchema), async (req, res) => {

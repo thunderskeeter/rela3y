@@ -1484,6 +1484,18 @@ html[data-theme="light"] .btn.primary{
 .platform-users-table .billing-status-pill{
   white-space: nowrap;
 }
+.platform-phone-table-wrap{
+  max-height: 420px;
+}
+.platform-phone-table td{
+  vertical-align: middle;
+}
+.platform-phone-table .select{
+  min-width: 220px;
+}
+.platform-twilio-connect-card.hidden{
+  display: none !important;
+}
 .status-badge{
   display:inline-flex;
   align-items:center;
