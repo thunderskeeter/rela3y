@@ -177,6 +177,70 @@ async function run() {
     assert.equal(second.body?.duplicate, true);
   }
 
+  await seedBaseline();
+  {
+    const { loadData, saveDataDebounced, flushDataNow } = require('../src/store/dataStore');
+    const data = loadData();
+    data.dev = data.dev && typeof data.dev === 'object' ? data.dev : {};
+    data.dev.platformBillingStripe = {
+      enabled: true,
+      secretKey: 'sk_test_platformwebhook',
+      publishableKey: '',
+      webhookSecret: 'whsec_platform_local',
+      accountId: 'acct_platform',
+      accountEmail: '',
+      accountDisplayName: '',
+      connectedAt: Date.now(),
+      lastTestedAt: null,
+      lastStatus: null,
+      lastError: null
+    };
+    const account = data.accounts?.[ACCOUNT_A_TO];
+    assert.ok(account, 'expected account');
+    account.billing = account.billing && typeof account.billing === 'object' ? account.billing : {};
+    account.billing.pendingCheckout = {
+      sessionId: 'cs_platform_1',
+      planKey: 'growth',
+      cadence: 'annual',
+      createdAt: Date.now()
+    };
+    saveDataDebounced(data);
+    await flushDataNow();
+
+    const body = JSON.stringify({
+      id: 'evt_platform_checkout_1',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_platform_1',
+          customer: 'cus_platform_1',
+          subscription: 'sub_platform_1',
+          payment_status: 'paid',
+          metadata: {
+            accountId: String(account.accountId || account.id || ''),
+            to: ACCOUNT_A_TO,
+            planKey: 'growth',
+            cadence: 'annual'
+          }
+        }
+      }
+    });
+    const sig = stripeSig(body, 'whsec_platform_local');
+    const res = await request(app)
+      .post('/webhooks/stripe/platform')
+      .set('stripe-signature', sig)
+      .set('content-type', 'application/json')
+      .send(body);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body?.ok, true);
+    const updated = loadData().accounts?.[ACCOUNT_A_TO];
+    assert.equal(String(updated?.billing?.platformStripeCustomerId || ''), 'cus_platform_1');
+    assert.equal(String(updated?.billing?.platformStripeSubscriptionId || ''), 'sub_platform_1');
+    assert.equal(String(updated?.billing?.plan?.key || ''), 'growth');
+    assert.equal(String(updated?.billing?.plan?.interval || ''), 'year');
+    assert.equal(String(updated?.billing?.plan?.status || ''), 'active');
+  }
+
   console.log('[tests] webhooks integration checks passed');
 }
 

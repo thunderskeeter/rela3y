@@ -20208,7 +20208,7 @@ function viewSettings(){
       }
       if (superadminPlatformStripeDetails) {
         const details = stripe.enabled
-          ? `Account: ${stripe.accountId || "--"} | Email: ${stripe.accountEmail || "--"} | Last tested: ${formatSyncTs(stripe.lastTestedAt)}`
+          ? `Account: ${stripe.accountId || "--"} | Email: ${stripe.accountEmail || "--"} | Last tested: ${formatSyncTs(stripe.lastTestedAt)} | Webhook: ${stripe.webhookUrl || "/webhooks/stripe/platform"}`
           : "Not connected";
         superadminPlatformStripeDetails.textContent = details;
       }
@@ -20543,7 +20543,7 @@ function viewSettings(){
         publishableKey: String(superadminPlatformStripePublishableKeyInput?.value || "").trim(),
         webhookSecret: String(superadminPlatformStripeWebhookSecretInput?.value || "").trim()
       };
-      if (!payload.secretKey) {
+      if (!payload.secretKey && !superadminPlatformStripeState?.secretKeyMasked) {
         if (superadminPlatformStripeActionStatus) superadminPlatformStripeActionStatus.textContent = "Secret key is required.";
         return;
       }

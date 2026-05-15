@@ -27,6 +27,7 @@ const {
   sanitizeUser,
   destroySessionsForUser
 } = require('../utils/auth');
+const { APP_PUBLIC_BASE_URL } = require('../config/runtime');
 
 const adminRouter = express.Router();
 const NICHE_TEMPLATE_KEYS = ['detailer'];
@@ -57,7 +58,7 @@ const userIdParamSchema = z.object({
 });
 
 const platformStripeConnectSchema = z.object({
-  secretKey: z.string().trim().min(1).max(256),
+  secretKey: z.string().trim().max(256).optional().default(''),
   publishableKey: z.string().trim().max(256).optional().default(''),
   webhookSecret: z.string().trim().max(256).optional().default('')
 });
@@ -301,6 +302,7 @@ async function testStripeCredentials(secretKey) {
 
 function platformStripeSnapshot(cfg) {
   const current = cfg && typeof cfg === 'object' ? cfg : {};
+  const base = String(APP_PUBLIC_BASE_URL || '').replace(/\/$/, '');
   return {
     enabled: current.enabled === true,
     accountId: String(current.accountId || ''),
@@ -308,6 +310,7 @@ function platformStripeSnapshot(cfg) {
     accountDisplayName: String(current.accountDisplayName || ''),
     publishableKey: String(current.publishableKey || ''),
     webhookSecretMasked: current.webhookSecret ? maskSecret(current.webhookSecret) : '',
+    webhookUrl: base ? `${base}/webhooks/stripe/platform` : '/webhooks/stripe/platform',
     secretKeyMasked: current.secretKey ? maskSecret(current.secretKey) : '',
     connectedAt: current.connectedAt ? Number(current.connectedAt) : null,
     lastTestedAt: current.lastTestedAt ? Number(current.lastTestedAt) : null,
@@ -646,9 +649,9 @@ adminRouter.get('/developer/platform-billing/stripe', (_req, res) => {
 adminRouter.put('/developer/platform-billing/stripe', validateBody(platformStripeConnectSchema), async (req, res) => {
   const data = loadData();
   const cfg = ensurePlatformStripeConfig(data);
-  const secretKey = String(req.body?.secretKey || '').trim();
+  const secretKey = String(req.body?.secretKey || '').trim() || String(cfg.secretKey || '').trim();
   const publishableKey = String(req.body?.publishableKey || '').trim();
-  const webhookSecret = String(req.body?.webhookSecret || '').trim();
+  const webhookSecret = String(req.body?.webhookSecret || '').trim() || String(cfg.webhookSecret || '').trim();
   if (!secretKey) return res.status(400).json({ error: 'secretKey is required' });
 
   try {
