@@ -13432,7 +13432,7 @@ function viewSettings(){
           </div>
           <div class="col">
             <label class="p">Status</label>
-            <div class="badge" id="superadminPlatformStripeStatusBadge">Not connected</div>
+            <div class="badge platform-stripe-status is-disconnected" id="superadminPlatformStripeStatusBadge">Not connected</div>
           </div>
         </div>
         <div style="height:8px;"></div>
@@ -20135,8 +20135,11 @@ function viewSettings(){
       const stripe = cfg && typeof cfg === "object" ? cfg : {};
       superadminPlatformStripeState = stripe;
       if (superadminPlatformStripeStatusBadge) {
-        const status = stripe.enabled ? `Connected (${stripe.lastStatus || "ok"})` : "Not connected";
+        const lastStatus = String(stripe.lastStatus || "").toLowerCase();
+        const isConnected = stripe.enabled === true && lastStatus !== "error";
+        const status = isConnected ? `Connected (${stripe.lastStatus || "ok"})` : "Not connected";
         superadminPlatformStripeStatusBadge.textContent = status;
+        superadminPlatformStripeStatusBadge.className = `badge platform-stripe-status ${isConnected ? "is-connected" : "is-disconnected"}`;
       }
       if (superadminPlatformStripeDetails) {
         const details = stripe.enabled

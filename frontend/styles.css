@@ -1437,6 +1437,27 @@ html[data-theme="light"] .btn.primary{
   color: var(--muted);
   background: var(--surface-2);
 }
+.platform-stripe-status{
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  width: 100%;
+  padding: 7px 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.platform-stripe-status.is-connected{
+  border-color: rgba(34, 197, 94, 0.62);
+  color: #dcfce7;
+  background: rgba(22, 101, 52, 0.74);
+  box-shadow: inset 0 1px 0 rgba(187, 247, 208, 0.12);
+}
+.platform-stripe-status.is-disconnected{
+  border-color: rgba(239, 68, 68, 0.62);
+  color: #fee2e2;
+  background: rgba(127, 29, 29, 0.72);
+  box-shadow: inset 0 1px 0 rgba(254, 202, 202, 0.10);
+}
 .status-badge{
   display:inline-flex;
   align-items:center;
