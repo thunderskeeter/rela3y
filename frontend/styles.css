@@ -9745,3 +9745,88 @@ select.select{
     height:17px;
   }
 }
+
+/* =========================
+   Responsive Header Alignment
+   ========================= */
+@media (max-width: 1180px){
+  .topbar{
+    min-height:80px;
+  }
+
+  .topbar-shell{
+    min-height:80px;
+    grid-template-columns:minmax(44px, 1fr) auto minmax(92px, 1fr) !important;
+    gap:8px;
+    align-items:center;
+  }
+
+  .topbar-left{
+    grid-column:1;
+    justify-self:start;
+  }
+
+  .topbar-center{
+    grid-column:2;
+    grid-row:1;
+    order:0;
+    justify-self:center;
+    min-width:0;
+  }
+
+  .topbar-right{
+    grid-column:3;
+    justify-self:end;
+    min-width:0;
+  }
+
+  .topbar-recovery-strip{
+    display:none;
+  }
+
+  .topbar-logo{
+    height:52px;
+    max-width:min(34vw, 240px);
+  }
+}
+
+@media (max-width: 640px){
+  .topbar{
+    min-height:72px;
+  }
+
+  .topbar-shell{
+    min-height:72px;
+    grid-template-columns:minmax(32px, 1fr) auto minmax(92px, 1fr) !important;
+    padding-inline:10px;
+  }
+
+  .topbar-logo-btn{
+    min-height:44px;
+    padding:2px 4px;
+  }
+
+  .topbar-logo{
+    height:38px;
+    max-width:min(38vw, 170px);
+  }
+
+  .topbar-right{
+    gap:8px;
+  }
+}
+
+@media (max-width: 380px){
+  .topbar-shell{
+    grid-template-columns:minmax(20px, 1fr) auto minmax(88px, 1fr) !important;
+    padding-inline:8px;
+  }
+
+  .topbar-logo{
+    max-width:138px;
+  }
+
+  .topbar-right{
+    gap:6px;
+  }
+}
