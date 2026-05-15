@@ -13720,7 +13720,7 @@ function viewSettings(){
         <div style="height:10px;"></div>
         <div class="card" style="background:var(--panel);">
           <div class="h1" style="margin:0;">Buy + Assign Twilio Number (Superadmin)</div>
-          <div class="p">Search available numbers from the selected workspace Twilio account, then purchase and auto-attach.</div>
+          <div class="p">Search available numbers from the connected platform Twilio account, then purchase and attach to the selected workspace.</div>
           <div style="height:8px;"></div>
           <div class="grid2">
             <div class="col">

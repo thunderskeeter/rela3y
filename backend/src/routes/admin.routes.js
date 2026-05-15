@@ -469,11 +469,31 @@ function getTwilioCredentialsForAccount(data, accountId) {
   const apiKeySid = String(tw.apiKeySid || '').trim();
   const apiKeySecret = String(tw.apiKeySecret || '').trim();
   if (!enabled || !accountSid || !apiKeySid || !apiKeySecret) {
-    return { ok: false, status: 400, error: 'Twilio is not connected for this workspace' };
+    const platformTwilio = data?.dev?.platformTwilio && typeof data.dev.platformTwilio === 'object'
+      ? data.dev.platformTwilio
+      : {};
+    const platformEnabled = platformTwilio.enabled === true;
+    const platformAccountSid = String(platformTwilio.accountSid || '').trim();
+    const platformApiKeySid = String(platformTwilio.apiKeySid || '').trim();
+    const platformApiKeySecret = String(platformTwilio.apiKeySecret || '').trim();
+    if (platformEnabled && platformAccountSid && platformApiKeySid && platformApiKeySecret) {
+      return {
+        ok: true,
+        found,
+        source: 'platform',
+        creds: {
+          accountSid: platformAccountSid,
+          apiKeySid: platformApiKeySid,
+          apiKeySecret: platformApiKeySecret
+        }
+      };
+    }
+    return { ok: false, status: 400, error: 'Twilio is not connected for this workspace or the platform account' };
   }
   return {
     ok: true,
     found,
+    source: 'workspace',
     creds: { accountSid, apiKeySid, apiKeySecret }
   };
 }
