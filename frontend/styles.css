@@ -9776,19 +9776,25 @@ select.select{
 
 @media (max-width: 1180px){
   .topbar{
-    min-height:74px;
+    min-height:116px;
   }
 
   .topbar-shell{
-    min-height:74px;
+    min-height:116px;
     grid-template-columns:minmax(96px, 1fr) auto minmax(96px, 1fr) !important;
-    gap:8px;
+    grid-template-rows:64px auto;
+    gap:0 8px;
     align-items:center;
+    padding-block:8px 10px;
   }
 
   .topbar-left{
-    grid-column:1;
-    justify-self:start;
+    grid-column:1 / -1;
+    grid-row:2;
+    justify-self:center;
+    width:100%;
+    display:flex;
+    justify-content:center;
   }
 
   .topbar-center{
@@ -9801,12 +9807,20 @@ select.select{
 
   .topbar-right{
     grid-column:3;
+    grid-row:1;
     justify-self:end;
     min-width:0;
   }
 
   .topbar-recovery-strip{
-    display:none;
+    display:grid;
+    grid-template-columns:repeat(3, minmax(0, auto));
+    justify-content:center;
+    align-items:center;
+    gap:8px 14px;
+    width:min(100%, 720px);
+    min-width:0;
+    padding:7px 12px;
   }
 
   .topbar-logo{
@@ -9817,13 +9831,15 @@ select.select{
 
 @media (max-width: 640px){
   .topbar{
-    min-height:64px;
+    min-height:128px;
   }
 
   .topbar-shell{
-    min-height:64px;
+    min-height:128px;
     grid-template-columns:minmax(96px, 1fr) auto minmax(96px, 1fr) !important;
+    grid-template-rows:58px auto;
     padding-inline:10px;
+    padding-block:6px 10px;
   }
 
   .topbar-logo-btn{
@@ -9838,6 +9854,18 @@ select.select{
 
   .topbar-right{
     gap:8px;
+  }
+
+  .topbar-recovery-strip{
+    grid-template-columns:1fr;
+    justify-items:start;
+    width:min(100%, 360px);
+    padding:7px 10px;
+  }
+
+  .topbar-recovery-line{
+    font-size:12px;
+    line-height:1.18;
   }
 }
 
