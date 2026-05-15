@@ -8,7 +8,7 @@ const { startRun, replayRun } = require('../services/agentEngine');
 const { recordSimulatedConversation } = require('../services/conversationsService');
 const { z, validateBody } = require('../utils/validate');
 const { DEV_MODE, APP_PUBLIC_BASE_URL } = require('../config/runtime');
-const { hasDeveloperAccess } = require('../utils/auth');
+const { hasDeveloperAccess, sanitizeUser } = require('../utils/auth');
 
 const devRouter = express.Router();
 const settingsPatchSchema = z.object({
@@ -104,6 +104,52 @@ function platformStripeSnapshot(cfg) {
   };
 }
 
+function collectAccountNumbers(account, to) {
+  const out = [];
+  if (to) out.push(String(to));
+  const workspaceNumbers = Array.isArray(account?.workspace?.phoneNumbers) ? account.workspace.phoneNumbers : [];
+  for (const row of workspaceNumbers) {
+    const num = String(row?.number || '').trim();
+    if (num) out.push(num);
+  }
+  const twilioPhone = String(account?.integrations?.twilio?.phoneNumber || '').trim();
+  if (twilioPhone) out.push(twilioPhone);
+  return [...new Set(out)];
+}
+
+function buildDeveloperUsersOverview(data) {
+  const users = Array.isArray(data?.users)
+    ? data.users.map(sanitizeUser).filter(Boolean)
+    : [];
+  const workspaces = [];
+
+  for (const [to, account] of Object.entries(data.accounts || {})) {
+    if (!account || typeof account !== 'object') continue;
+    const accountId = String(account.accountId || account.id || '').trim();
+    if (!accountId) continue;
+    const billing = account?.billing && typeof account.billing === 'object' ? account.billing : {};
+    const billingPlan = billing?.plan && typeof billing.plan === 'object' ? billing.plan : {};
+    workspaces.push({
+      to: String(to),
+      accountId,
+      businessName: String(account.businessName || account?.workspace?.identity?.businessName || '').trim() || 'Workspace',
+      numbers: collectAccountNumbers(account, to),
+      billing: {
+        provider: String(billing.provider || 'demo'),
+        isLive: billing.isLive === true,
+        planName: String(billingPlan.name || billingPlan.key || 'Pro'),
+        planStatus: String(billingPlan.status || account?.provisioning?.status || 'unpaid'),
+        priceMonthly: Number(billingPlan.priceMonthly || 0),
+        nextBillingAt: billingPlan.nextBillingAt ? Number(billingPlan.nextBillingAt) : null,
+        billingEmail: String(billing?.details?.billingEmail || '')
+      }
+    });
+  }
+
+  workspaces.sort((a, b) => String(a.businessName).localeCompare(String(b.businessName)));
+  return { asOf: Date.now(), users, workspaces };
+}
+
 function stripeAuthHeader(secretKey) {
   const token = Buffer.from(`${String(secretKey || '').trim()}:`, 'utf8').toString('base64');
   return `Basic ${token}`;
@@ -149,6 +195,11 @@ devRouter.get('/dev/platform-billing/stripe', (_req, res) => {
   const cfg = ensurePlatformStripeConfig(data);
   saveDataDebounced(data);
   return res.json({ ok: true, stripe: platformStripeSnapshot(cfg) });
+});
+
+devRouter.get('/dev/users-overview', (_req, res) => {
+  const data = loadData();
+  return res.json({ ok: true, ...buildDeveloperUsersOverview(data) });
 });
 
 devRouter.put('/dev/platform-billing/stripe', validateBody(platformStripeConnectSchema), async (req, res) => {

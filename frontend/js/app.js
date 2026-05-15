@@ -20266,7 +20266,7 @@ function viewSettings(){
       const workspaces = Array.isArray(payload.workspaces) ? payload.workspaces : platformUsersState.workspaces;
       platformUsersState = { users, workspaces };
 
-      if (String(authState?.user?.role || "").toLowerCase() !== "superadmin") {
+      if (!canAccessDeveloperTools()) {
         if (platformUsersPanel) platformUsersPanel.style.display = "none";
         return;
       }
@@ -20577,15 +20577,23 @@ function viewSettings(){
     async function refreshSuperadminOps() {
       if (String(authState?.user?.role || "").toLowerCase() !== "superadmin") {
         if (superadminOpsPanel) superadminOpsPanel.style.display = "none";
-        renderPlatformUsers({ users: [], workspaces: [] });
+        try {
+          const usersOverview = await apiGet("/api/dev/users-overview");
+          renderPlatformUsers({
+            users: Array.isArray(usersOverview?.users) ? usersOverview.users : [],
+            workspaces: Array.isArray(usersOverview?.workspaces) ? usersOverview.workspaces : []
+          });
+        } catch (err) {
+          if (platformUsersSummary) platformUsersSummary.textContent = err?.message || "Failed to load users";
+        }
         await refreshSuperadminPlatformStripe();
         return;
       }
       if (superadminOpsPanel) superadminOpsPanel.style.display = "";
       try {
-        const [overviewRes, usersRes] = await Promise.all([
+        const [overviewRes, usersOverview] = await Promise.all([
           apiGet("/api/admin/developer/ops-overview"),
-          apiGet("/api/admin/users")
+          apiGet("/api/dev/users-overview")
         ]);
         let overview = overviewRes;
         const rows = Array.isArray(overview?.workspaces) ? overview.workspaces : [];
@@ -20629,10 +20637,13 @@ function viewSettings(){
             }))
           };
         }
-        adminUsersCache = Array.isArray(usersRes?.users) ? usersRes.users : [];
+        adminUsersCache = Array.isArray(usersOverview?.users) ? usersOverview.users : [];
         applyAdminUserSelect(adminUsersCache);
         renderSuperadminOpsView(overview || {});
-        renderPlatformUsers({ users: adminUsersCache, workspaces: Array.isArray(overview?.workspaces) ? overview.workspaces : [] });
+        renderPlatformUsers({
+          users: adminUsersCache,
+          workspaces: Array.isArray(usersOverview?.workspaces) ? usersOverview.workspaces : []
+        });
         await refreshSuperadminPlatformStripe();
         await refreshSuperadminTwilioInventory();
       } catch (err) {
