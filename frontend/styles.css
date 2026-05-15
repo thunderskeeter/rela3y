@@ -9749,14 +9749,39 @@ select.select{
 /* =========================
    Responsive Header Alignment
    ========================= */
+.topbar{
+  min-height:84px;
+}
+
+.topbar-shell{
+  min-height:84px;
+  align-items:center;
+}
+
+.topbar-left,
+.topbar-center,
+.topbar-right{
+  align-self:center;
+}
+
+.topbar-logo{
+  height:54px;
+  max-width:260px;
+}
+
+.topbar-recovery-strip{
+  padding:7px 12px;
+  min-width:260px;
+}
+
 @media (max-width: 1180px){
   .topbar{
-    min-height:80px;
+    min-height:74px;
   }
 
   .topbar-shell{
-    min-height:80px;
-    grid-template-columns:minmax(44px, 1fr) auto minmax(92px, 1fr) !important;
+    min-height:74px;
+    grid-template-columns:minmax(96px, 1fr) auto minmax(96px, 1fr) !important;
     gap:8px;
     align-items:center;
   }
@@ -9785,19 +9810,19 @@ select.select{
   }
 
   .topbar-logo{
-    height:52px;
-    max-width:min(34vw, 240px);
+    height:44px;
+    max-width:min(30vw, 180px);
   }
 }
 
 @media (max-width: 640px){
   .topbar{
-    min-height:72px;
+    min-height:64px;
   }
 
   .topbar-shell{
-    min-height:72px;
-    grid-template-columns:minmax(32px, 1fr) auto minmax(92px, 1fr) !important;
+    min-height:64px;
+    grid-template-columns:minmax(96px, 1fr) auto minmax(96px, 1fr) !important;
     padding-inline:10px;
   }
 
@@ -9807,8 +9832,8 @@ select.select{
   }
 
   .topbar-logo{
-    height:38px;
-    max-width:min(38vw, 170px);
+    height:34px;
+    max-width:116px;
   }
 
   .topbar-right{
@@ -9818,12 +9843,12 @@ select.select{
 
 @media (max-width: 380px){
   .topbar-shell{
-    grid-template-columns:minmax(20px, 1fr) auto minmax(88px, 1fr) !important;
+    grid-template-columns:minmax(90px, 1fr) auto minmax(90px, 1fr) !important;
     padding-inline:8px;
   }
 
   .topbar-logo{
-    max-width:138px;
+    max-width:106px;
   }
 
   .topbar-right{
