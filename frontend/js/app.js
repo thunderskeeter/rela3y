@@ -20207,7 +20207,7 @@ function viewSettings(){
         tr.innerHTML = `
           <td>${escapeHtml(account?.businessName || "-")}</td>
           <td>${escapeHtml(workspaceAccountIdForDisplay(account?.accountId, account?.businessName || "Workspace"))}</td>
-          <td>${escapeHtml(workspaceNumberForDisplay(account?.to, "No live number assigned"))}</td>
+          <td>${escapeHtml(workspaceNumberForDisplay(account?.to, "See Phone Numbers"))}</td>
           <td>${escapeHtml(formatAdminCreatedAt(account?.createdAt))}</td>
         `;
         adminAccountsTableBody.appendChild(tr);
