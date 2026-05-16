@@ -25,6 +25,7 @@ const {
   recordOutboundAttempt,
   updateConversationStatusLegacy
 } = require('../services/messagingBoundaryService');
+const { appendOutboundMessage } = require('../services/messagesService');
 const { getConversationDetail } = require('../services/conversationsService');
 
 const webhooksRouter = express.Router();
@@ -146,6 +147,69 @@ function missedCallVoiceTwiml(twilioCfg = {}) {
   }
   const fallbackText = String(twilioCfg?.missedCallFallbackText || "Thanks for calling. Sorry we missed you. I'm texting you now so we can help faster.").trim();
   return `<?xml version="1.0" encoding="UTF-8"?><Response><Say>${escapeXml(fallbackText)}</Say><Hangup/></Response>`;
+}
+
+function missedCallSmsText(twilioCfg = {}) {
+  return String(twilioCfg?.missedCallFallbackText || "Thanks for calling. Sorry we missed you. I'm texting you now so we can help faster.").trim();
+}
+
+function hasRecentMissedCallAutoReply(conversation) {
+  const now = Date.now();
+  const messages = Array.isArray(conversation?.messages) ? conversation.messages : [];
+  return messages.some((msg) => {
+    const dir = String(msg?.dir || msg?.direction || '').toLowerCase();
+    if (dir !== 'out' && dir !== 'outbound') return false;
+    const body = String(msg?.text || msg?.body || '').trim();
+    if (!body) return false;
+    const createdAt = Number(msg?.createdAt || msg?.ts || msg?.at || msg?.updatedAt || 0);
+    if (!Number.isFinite(createdAt) || createdAt <= 0) return false;
+    return now - createdAt < 2 * 60 * 1000;
+  });
+}
+
+async function sendMissedCallSmsReply({ tenant, from, to, twilioCfg = {}, callSid = '' } = {}) {
+  const text = missedCallSmsText(twilioCfg);
+  const destination = String(from || '').trim();
+  const tenantTo = String(to || tenant?.to || '').trim();
+  if (!tenant?.accountId || !tenantTo || !destination || !text) {
+    return { ok: false, skipped: true, reason: 'missing_required_fields' };
+  }
+  const idempotencyKey = callSid
+    ? `twilio_voice_reply:${tenant.accountId}:${String(callSid)}`
+    : `twilio_voice_reply:${tenant.accountId}:${tenantTo}:${destination}`;
+  const { sendResult } = await appendOutboundMessage({
+    tenant,
+    to: tenantTo,
+    from: destination,
+    text,
+    source: 'twilio_voice_missed_call',
+    consentConfirmed: true,
+    consentSource: 'inbound_call',
+    transactional: true,
+    requireExisting: false,
+    route: '/webhooks/voice/incoming',
+    meta: {
+      auto: true,
+      idempotencyKey,
+      callSid: String(callSid || ''),
+      trigger: 'missed_call',
+      source: 'twilio_voice_missed_call'
+    }
+  });
+  if (!sendResult?.ok) {
+    emitEvent(tenant, {
+      type: 'failed_automation',
+      to: tenantTo,
+      from: destination,
+      conversationId: `${tenantTo}__${destination}`,
+      meta: {
+        trigger: 'missed_call',
+        source: 'twilio_voice_missed_call',
+        errorCode: String(sendResult?.error?.code || sendResult?.error || 'send_failed')
+      }
+    });
+  }
+  return sendResult || { ok: false, error: { code: 'UNKNOWN', message: 'Send failed' } };
 }
 
 function hasValidTwilioSignature(req) {
@@ -398,7 +462,10 @@ webhooksRouter.post("/voice/incoming", validateBody(voiceSchema), async (req, re
         const callEventId = callSid || fingerprintWebhookEvent(['twilio_voice_incoming', tenant.accountId, to, caller], 30_000);
         const dedupe = await claimWebhookEvent(tenant.accountId, 'twilio_voice_incoming', callEventId);
         if (dedupe.duplicate !== true) {
-          await processMissedCall({ tenant, from: caller, to });
+          const missedCallResult = await processMissedCall({ tenant, from: caller, to });
+          if (!hasRecentMissedCallAutoReply(missedCallResult?.conversation)) {
+            await sendMissedCallSmsReply({ tenant, from: caller, to, twilioCfg, callSid });
+          }
         }
       }
       return twiml(res, missedCallVoiceTwiml(twilioCfg));
@@ -451,10 +518,14 @@ webhooksRouter.post("/voice/dial-result", validateBody(voiceSchema), async (req,
     const shouldTreatAsMissed = ['no-answer', 'busy', 'failed', 'canceled'].includes(dialStatus);
 
     if (from && to && shouldTreatAsMissed) {
-      await processMissedCall({ tenant, from, to });
+      const twilioCfg = getTenantTwilioConfig(tenant);
+      const missedCallResult = await processMissedCall({ tenant, from, to });
+      if (!hasRecentMissedCallAutoReply(missedCallResult?.conversation)) {
+        await sendMissedCallSmsReply({ tenant, from, to, twilioCfg, callSid });
+      }
       return twiml(
         res,
-        missedCallVoiceTwiml(getTenantTwilioConfig(tenant))
+        missedCallVoiceTwiml(twilioCfg)
       );
     }
 
