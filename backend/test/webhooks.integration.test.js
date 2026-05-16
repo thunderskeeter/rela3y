@@ -130,6 +130,40 @@ async function run() {
   await seedBaseline();
   {
     const { loadData, saveDataDebounced, flushDataNow } = require('../src/store/dataStore');
+    const assignedTwilioNumber = '+18145550177';
+    const data = loadData();
+    data.accounts[ACCOUNT_A_TO].workspace = data.accounts[ACCOUNT_A_TO].workspace || {};
+    data.accounts[ACCOUNT_A_TO].workspace.phoneNumbers = [
+      { number: ACCOUNT_A_TO, label: 'Main', isPrimary: true },
+      { number: assignedTwilioNumber, label: 'Twilio secondary', isPrimary: false }
+    ];
+    data.accounts[ACCOUNT_A_TO].integrations = data.accounts[ACCOUNT_A_TO].integrations || {};
+    data.accounts[ACCOUNT_A_TO].integrations.twilio = {
+      enabled: true,
+      accountSid: 'AC11111111111111111111111111111111',
+      apiKeySid: 'SK11111111111111111111111111111111',
+      apiKeySecret: 'test-secret',
+      phoneNumber: assignedTwilioNumber,
+      webhookAuthToken: 'tenant-token'
+    };
+    saveDataDebounced(data);
+    await flushDataNow();
+
+    const smsToAssignedNumber = await request(app)
+      .post('/webhooks/sms')
+      .set('x-dev-webhook-secret', process.env.WEBHOOK_DEV_SECRET)
+      .send({
+        From: '+18145550178',
+        To: assignedTwilioNumber,
+        Body: 'Testing assigned number routing'
+      });
+    assert.equal(smsToAssignedNumber.statusCode, 200);
+    assert.equal(smsToAssignedNumber.body?.ok, true);
+  }
+
+  await seedBaseline();
+  {
+    const { loadData, saveDataDebounced, flushDataNow } = require('../src/store/dataStore');
     const data = loadData();
     data.accounts[ACCOUNT_A_TO].integrations = data.accounts[ACCOUNT_A_TO].integrations || {};
     data.accounts[ACCOUNT_A_TO].integrations.twilio = {

@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const { DEV_MODE, WEBHOOK_AUTH_TOKEN, WEBHOOK_DEV_SECRET } = require('../config/runtime');
-const { getTenantWebhookAuthTokenByTo } = require('../services/twilioIntegrationService');
 const {
   loadData,
   saveDataDebounced,
@@ -75,6 +74,28 @@ function getHeader(req, key) {
   return String(req?.headers?.[key] || '').trim();
 }
 
+function normalizePhone(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const hasPlus = raw.startsWith('+');
+  const digits = raw.replace(/[^\d]/g, '');
+  return hasPlus ? `+${digits}` : digits;
+}
+
+function accountHasNumber(account, accountTo, phoneNumber) {
+  const target = normalizePhone(phoneNumber);
+  if (!target || !account || typeof account !== 'object') return false;
+  const candidates = [
+    accountTo,
+    account.to,
+    account?.integrations?.twilio?.phoneNumber,
+    ...(Array.isArray(account?.workspace?.phoneNumbers)
+      ? account.workspace.phoneNumbers.map((row) => row?.number)
+      : [])
+  ];
+  return candidates.some((candidate) => normalizePhone(candidate) === target);
+}
+
 function resolveTenantSelector(req, { allowBodyTo = false } = {}) {
   const accountId = getQuery(req, 'accountId');
   const to = getQuery(req, 'to');
@@ -91,14 +112,19 @@ function resolveTenantSelector(req, { allowBodyTo = false } = {}) {
 }
 
 function resolveWebhookTenantSelector(req) {
-  // Webhook tenant is derived from destination number.
-  // Prefer signed query `to` when present because voice callbacks can contain
-  // destination numbers that are not tenant numbers in body To.
+  // Webhook tenant is derived from Twilio-owned numbers only.
+  // Status callbacks often contain the customer in body To and the Twilio
+  // sender in body From, while inbound SMS/voice usually contain Twilio in To.
   const bodyTo = String(req?.body?.To || req?.body?.to || '').trim();
+  const bodyFrom = String(req?.body?.From || req?.body?.from || '').trim();
   const queryTo = String(req?.query?.to || '').trim();
-  const value = queryTo || bodyTo;
-  if (!value) return null;
-  return { type: 'to', value };
+  const candidates = [
+    queryTo ? { value: queryTo, source: 'queryTo' } : null,
+    bodyTo ? { value: bodyTo, source: 'bodyTo' } : null,
+    bodyFrom ? { value: bodyFrom, source: 'bodyFrom' } : null
+  ].filter(Boolean);
+  if (!candidates.length) return null;
+  return { type: 'to', value: candidates[0].value, candidates };
 }
 
 function loadAccountByTo(to) {
@@ -106,6 +132,21 @@ function loadAccountByTo(to) {
   const account = getAccountByToFromData(data, to);
   if (!account) return null;
   return { to: String(to), account };
+}
+
+function loadAccountByPhoneNumber(phoneNumber) {
+  const data = loadData();
+  const exact = getAccountByToFromData(data, String(phoneNumber || '').trim());
+  if (exact) return { to: String(phoneNumber || '').trim(), account: exact };
+
+  const target = normalizePhone(phoneNumber);
+  if (!target) return null;
+  for (const [to, account] of Object.entries(data.accounts || {})) {
+    if (accountHasNumber(account, to, target)) {
+      return { to: String(to), account };
+    }
+  }
+  return null;
 }
 
 function loadAccountById(accountId) {
@@ -211,16 +252,27 @@ function requireTenantForWebhook(req, res, next) {
     return res.status(403).json({ error: 'Missing webhook tenant (To)' });
   }
 
-  const to = String(selector.value);
-  const found = loadAccountByTo(to);
+  const candidates = Array.isArray(selector.candidates) && selector.candidates.length
+    ? selector.candidates
+    : [{ value: selector.value, source: 'selector' }];
+  const matched = candidates
+    .map((candidate) => ({
+      source: String(candidate?.source || 'selector'),
+      found: loadAccountByPhoneNumber(candidate?.value)
+    }))
+    .find((match) => match?.found?.account);
+  const found = matched?.found;
   if (!found?.account) {
     // Avoid account enumeration from webhooks.
     return res.status(403).json({ error: 'Invalid webhook tenant' });
   }
   const resolvedAccountId = String(found.account.id || found.account.accountId);
 
-  const tenantWebhookToken = getTenantWebhookAuthTokenByTo(to);
+  const tenantWebhookToken = String(found.account?.integrations?.twilio?.webhookAuthToken || '').trim();
   const signatureOk = hasValidTwilioSignatureForToken(req, tenantWebhookToken) || hasValidTwilioSignature(req);
+  if (matched?.source === 'bodyFrom' && !signatureOk) {
+    return res.status(403).json({ error: 'Invalid webhook signature' });
+  }
   const simulatorUser = DEV_MODE === true ? attachUserFromSession(req) : null;
   const simulatorOk = Boolean(
     simulatorUser &&
@@ -239,6 +291,7 @@ module.exports = {
   resolveTenantSelector,
   resolveWebhookTenantSelector,
   loadAccountByTo,
+  loadAccountByPhoneNumber,
   loadAccountById,
   ensureAccountForTo,
   attachTenant,

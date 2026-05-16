@@ -17,6 +17,7 @@ const {
 } = require('../services/calendarIcsService');
 const {
   connectTwilioForTenant,
+  updateTwilioVoiceForTenant,
   testTwilioForTenant,
   disconnectTwilioForTenant,
   getTenantTwilioSnapshot
@@ -54,6 +55,14 @@ const twilioConnectSchema = z.object({
   missedCallAudioUrl: z.string().trim().max(2048).optional(),
   missedCallFallbackText: z.string().trim().max(320).optional(),
   webhookAuthToken: z.string().trim().optional()
+}).passthrough();
+
+const twilioVoiceSchema = z.object({
+  voiceMode: z.enum(['answer_then_text', 'forward_first']).optional(),
+  missedCallAudioUrl: z.string().trim().max(2048).optional(),
+  missedCallFallbackText: z.string().trim().max(320).optional()
+}).refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one Twilio voice field must be provided'
 }).passthrough();
 
 const calendarIcsSchema = z.object({
@@ -147,6 +156,17 @@ integrationsRouter.put('/integrations/twilio', validateBody(twilioConnectSchema)
     return res.json({ ...result, ...snapshot, ...getTenantTwilioSnapshot(tenant) });
   } catch (err) {
     return res.status(400).json({ error: err?.message || 'Failed to connect Twilio' });
+  }
+});
+
+integrationsRouter.put('/integrations/twilio/voice', validateBody(twilioVoiceSchema), (req, res) => {
+  try {
+    const tenant = req.tenant;
+    const result = updateTwilioVoiceForTenant(tenant, req.body || {});
+    const snapshot = getTenantIntegrationSnapshot(tenant);
+    return res.json({ ...result, ...snapshot });
+  } catch (err) {
+    return res.status(400).json({ error: err?.message || 'Failed to save Twilio voice settings' });
   }
 });
 

@@ -122,9 +122,15 @@ function validateTwilioInput(input, currentCfg = null) {
   const apiKeySid = String(src.apiKeySid || '').trim() || String(currentCfg?.apiKeySid || '').trim();
   const apiKeySecretRaw = String(src.apiKeySecret || '').trim();
   const apiKeySecret = apiKeySecretRaw || String(currentCfg?.apiKeySecret || '').trim();
-  const messagingServiceSid = String(src.messagingServiceSid || '').trim();
-  const phoneNumber = String(src.phoneNumber || '').trim();
-  const voiceForwardTo = String(src.voiceForwardTo || '').trim();
+  const messagingServiceSid = Object.prototype.hasOwnProperty.call(src, 'messagingServiceSid')
+    ? String(src.messagingServiceSid || '').trim()
+    : String(currentCfg?.messagingServiceSid || '').trim();
+  const phoneNumber = Object.prototype.hasOwnProperty.call(src, 'phoneNumber')
+    ? String(src.phoneNumber || '').trim()
+    : String(currentCfg?.phoneNumber || '').trim();
+  const voiceForwardTo = Object.prototype.hasOwnProperty.call(src, 'voiceForwardTo')
+    ? String(src.voiceForwardTo || '').trim()
+    : String(currentCfg?.voiceForwardTo || '').trim();
   const voiceDialTimeoutRaw = src.voiceDialTimeoutSec;
   const voiceDialTimeoutSec = Number.isFinite(Number(voiceDialTimeoutRaw))
     ? Math.round(Number(voiceDialTimeoutRaw))
@@ -300,6 +306,30 @@ async function connectTwilioForTenant(tenant, input = {}) {
   };
 }
 
+function updateTwilioVoiceForTenant(tenant, input = {}) {
+  const data = loadData();
+  const { account } = accountByTenant(data, tenant);
+  const current = ensureTwilioConfig(account);
+  if (current.enabled !== true) {
+    throw new Error('Twilio is not connected');
+  }
+  const validated = validateTwilioInput(input, current);
+  account.integrations.twilio = {
+    ...current,
+    voiceMode: validated.voiceMode,
+    missedCallAudioUrl: validated.missedCallAudioUrl,
+    missedCallFallbackText: validated.missedCallFallbackText,
+    lastStatus: current.lastStatus || 'ok',
+    lastError: null
+  };
+  appendIntegrationLog(account, 'twilio.voice.update', 'Twilio voice settings updated');
+  saveDataDebounced(data);
+  return {
+    ok: true,
+    twilio: twilioSnapshotFromConfig(account.integrations.twilio)
+  };
+}
+
 async function testTwilioForTenant(tenant) {
   const data = loadData();
   const { account } = accountByTenant(data, tenant);
@@ -465,6 +495,7 @@ async function sendTwilioMessageForTenant(tenant, { to, body, statusCallbackUrl 
 module.exports = {
   buildConvoKey,
   connectTwilioForTenant,
+  updateTwilioVoiceForTenant,
   testTwilioForTenant,
   disconnectTwilioForTenant,
   getTenantTwilioSnapshot,

@@ -225,6 +225,49 @@ function getAssignedWorkspacesForNumber(data, phoneNumber) {
   return out;
 }
 
+function syncPlatformTwilioToAssignedWorkspaces(data, platformTwilio, platformNumbers = []) {
+  const cfg = platformTwilio && typeof platformTwilio === 'object' ? platformTwilio : {};
+  if (cfg.enabled !== true || !cfg.accountSid || !cfg.apiKeySid || !cfg.apiKeySecret) return 0;
+
+  const ownedNumbers = new Set(
+    (Array.isArray(platformNumbers) ? platformNumbers : [])
+      .map((row) => normalizePhone(row?.phoneNumber || row?.phone_number || row?.number || ''))
+      .filter(Boolean)
+  );
+  if (!ownedNumbers.size) return 0;
+
+  let synced = 0;
+  for (const account of Object.values(data.accounts || {})) {
+    if (!account || typeof account !== 'object') continue;
+    const workspaceNumbers = Array.isArray(account?.workspace?.phoneNumbers) ? account.workspace.phoneNumbers : [];
+    const assignedNumbers = workspaceNumbers
+      .map((row) => normalizePhone(row?.number))
+      .filter((number) => number && ownedNumbers.has(number));
+    if (!assignedNumbers.length) continue;
+
+    const primaryAssigned = workspaceNumbers.find((row) => row?.isPrimary === true && ownedNumbers.has(normalizePhone(row?.number)));
+    const phoneNumber = normalizePhone(primaryAssigned?.number) || assignedNumbers[0];
+    account.integrations = account.integrations && typeof account.integrations === 'object' ? account.integrations : {};
+    const current = account.integrations.twilio && typeof account.integrations.twilio === 'object'
+      ? account.integrations.twilio
+      : {};
+    account.integrations.twilio = {
+      ...current,
+      enabled: true,
+      accountSid: cfg.accountSid,
+      apiKeySid: cfg.apiKeySid,
+      apiKeySecret: cfg.apiKeySecret,
+      webhookAuthToken: cfg.webhookAuthToken,
+      phoneNumber,
+      lastStatus: current.lastStatus || 'assigned',
+      lastTestedAt: current.lastTestedAt || Date.now(),
+      lastError: null
+    };
+    synced += 1;
+  }
+  return synced;
+}
+
 async function buildPlatformTwilioInventory(data) {
   const cfg = ensurePlatformTwilioConfig(data);
   const workspaces = listDeveloperWorkspaces(data);
@@ -379,6 +422,7 @@ devRouter.put('/dev/platform-twilio', validateBody(platformTwilioConnectSchema),
 
   try {
     const numbers = await listTwilioIncomingNumbers(next);
+    const syncedWorkspaces = syncPlatformTwilioToAssignedWorkspaces(data, next, numbers);
     next.lastStatus = 'ok';
     next.lastError = null;
     next.lastTestedAt = Date.now();
@@ -388,7 +432,10 @@ devRouter.put('/dev/platform-twilio', validateBody(platformTwilioConnectSchema),
     return res.json({
       ok: true,
       twilio: platformTwilioSnapshot(next),
-      summary: { twilioNumberCount: Array.isArray(numbers) ? numbers.length : 0 }
+      summary: {
+        twilioNumberCount: Array.isArray(numbers) ? numbers.length : 0,
+        syncedWorkspaces
+      }
     });
   } catch (err) {
     next.lastTestedAt = Date.now();

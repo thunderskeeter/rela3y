@@ -13040,6 +13040,36 @@ function viewSettings(){
         </div>
         <div style="height:12px;"></div>
         <div class="card" style="background:var(--panel);">
+          <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+            <div class="col" style="gap:4px;">
+              <div class="h1" style="margin:0;">Missed Call Voice Message</div>
+              <div class="p">Twilio answers, plays this message, hangs up, then Relay sends the follow-up SMS.</div>
+            </div>
+            <span class="badge">Twilio voice</span>
+          </div>
+          <div style="height:8px;"></div>
+          <div class="grid2">
+            <div class="col">
+              <label class="p">Voice handling</label>
+              <select class="select" id="callRoutingVoiceMode">
+                <option value="answer_then_text">Answer, play audio, then text</option>
+                <option value="forward_first">Forward first, text if missed</option>
+              </select>
+            </div>
+            <div class="col">
+              <label class="p">MP3 audio URL</label>
+              <input class="input" id="callRoutingMissedCallAudioUrl" placeholder="https://cdn.example.com/audio/missed-call-message.mp3" />
+            </div>
+          </div>
+          <div style="height:8px;"></div>
+          <div class="col">
+            <label class="p">Fallback spoken text</label>
+            <textarea class="input" id="callRoutingMissedCallFallbackText" rows="3" placeholder="Thanks for calling. Sorry we missed you. I'm texting you now so we can help faster."></textarea>
+          </div>
+          <div class="p" id="callRoutingVoiceStatus" style="margin-top:8px;">Use a public HTTPS MP3 URL. If no MP3 is set, Twilio reads the fallback text.</div>
+        </div>
+        <div style="height:12px;"></div>
+        <div class="card" style="background:var(--panel);">
           <div class="h1" style="margin:0;">Carrier Steps</div>
           <div class="p" style="margin-top:6px;">Defaults are *72 and *73. Update these if your carrier uses different codes.</div>
           <div style="height:8px;"></div>
@@ -15152,6 +15182,10 @@ function viewSettings(){
     const callRoutingStatusLine = document.getElementById("callRoutingStatusLine");
     const callRoutingStatusBadge = document.getElementById("callRoutingStatusBadge");
     const callRoutingStatus = document.getElementById("callRoutingStatus");
+    const callRoutingVoiceModeInput = document.getElementById("callRoutingVoiceMode");
+    const callRoutingMissedCallAudioUrlInput = document.getElementById("callRoutingMissedCallAudioUrl");
+    const callRoutingMissedCallFallbackTextInput = document.getElementById("callRoutingMissedCallFallbackText");
+    const callRoutingVoiceStatus = document.getElementById("callRoutingVoiceStatus");
     const callRoutingCopyEnableBtn = document.getElementById("callRoutingCopyEnableBtn");
     const callRoutingCopyDisableBtn = document.getElementById("callRoutingCopyDisableBtn");
     const callRoutingMarkCompleteBtn = document.getElementById("callRoutingMarkCompleteBtn");
@@ -15191,6 +15225,12 @@ function viewSettings(){
       callRoutingStatus.style.color = isError ? "var(--danger, #d97373)" : "";
     }
 
+    function setCallRoutingVoiceStatus(msg, isError = false) {
+      if (!callRoutingVoiceStatus) return;
+      callRoutingVoiceStatus.textContent = String(msg || "");
+      callRoutingVoiceStatus.style.color = isError ? "var(--danger, #d97373)" : "";
+    }
+
     function readCallRoutingFromUi() {
       return {
         businessNumber: String(callRoutingBusinessNumberInput?.value || "").trim(),
@@ -15216,6 +15256,46 @@ function viewSettings(){
         callRoutingDisableCodeInput.value = String(data?.disableCode || getCarrierDisableCode(carrier) || "*73");
       }
       setCallRoutingStatusText(String(data?.status || "Not setup"));
+    }
+
+    function applyCallRoutingVoiceToUi(twilio = {}) {
+      if (callRoutingVoiceModeInput) {
+        callRoutingVoiceModeInput.value = String(twilio?.voiceMode || "answer_then_text") === "forward_first" ? "forward_first" : "answer_then_text";
+      }
+      if (callRoutingMissedCallAudioUrlInput) {
+        callRoutingMissedCallAudioUrlInput.value = String(twilio?.missedCallAudioUrl || "");
+      }
+      if (callRoutingMissedCallFallbackTextInput) {
+        callRoutingMissedCallFallbackTextInput.value = String(twilio?.missedCallFallbackText || "Thanks for calling. Sorry we missed you. I'm texting you now so we can help faster.");
+      }
+      const connected = twilio?.enabled === true;
+      const hasAudio = String(twilio?.missedCallAudioUrl || "").trim();
+      setCallRoutingVoiceStatus(
+        connected
+          ? (hasAudio ? "Voice message audio is set." : "No MP3 set yet. Twilio will read the fallback text.")
+          : "Twilio must be connected before saving the voice message.",
+        !connected
+      );
+    }
+
+    async function loadCallRoutingVoiceState() {
+      try {
+        const snapshot = await apiGet("/api/integrations");
+        applyCallRoutingVoiceToUi(snapshot?.twilio || {});
+      } catch (err) {
+        setCallRoutingVoiceStatus(err?.message || "Failed to load Twilio voice settings.", true);
+      }
+    }
+
+    async function saveCallRoutingVoiceState() {
+      const payload = {
+        voiceMode: String(callRoutingVoiceModeInput?.value || "answer_then_text") === "forward_first" ? "forward_first" : "answer_then_text",
+        missedCallAudioUrl: String(callRoutingMissedCallAudioUrlInput?.value || "").trim(),
+        missedCallFallbackText: String(callRoutingMissedCallFallbackTextInput?.value || "").trim()
+      };
+      const saved = await apiPut("/api/integrations/twilio/voice", payload);
+      applyCallRoutingVoiceToUi(saved?.twilio || {});
+      return saved;
     }
 
     function loadCallRoutingState() {
@@ -15261,10 +15341,20 @@ function viewSettings(){
     callRoutingCopyDisableBtn?.addEventListener("click", async () => {
       await copyCallRoutingValue(callRoutingDisableCodeInput?.value, "Disable code");
     });
-    callRoutingSaveBtn?.addEventListener("click", () => {
-      saveCallRoutingState("Pending test");
-      setCallRoutingInlineStatus("Saved. Run a test call to confirm forwarding.");
-      showSettingsToast("Call routing saved");
+    callRoutingSaveBtn?.addEventListener("click", async () => {
+      try {
+        callRoutingSaveBtn.disabled = true;
+        saveCallRoutingState("Pending test");
+        await saveCallRoutingVoiceState();
+        setCallRoutingInlineStatus("Saved. Run a test call to confirm forwarding and voice playback.");
+        showSettingsToast("Call routing saved");
+      } catch (err) {
+        setCallRoutingInlineStatus(err?.message || "Failed to save call routing.", true);
+        setCallRoutingVoiceStatus(err?.message || "Failed to save voice message.", true);
+        showSettingsToast("Failed to save call routing", true);
+      } finally {
+        callRoutingSaveBtn.disabled = false;
+      }
     });
     callRoutingMarkCompleteBtn?.addEventListener("click", () => {
       saveCallRoutingState("Active");
@@ -15277,6 +15367,7 @@ function viewSettings(){
       showSettingsToast("Run a live test call to the business number");
     });
     loadCallRoutingState();
+    settingsPanelLoaders["call-routing"] = loadCallRoutingVoiceState;
 
     const notifDefaults = {
       channels: { email: true, sms: false, desktop: false },
@@ -20900,7 +20991,7 @@ function viewSettings(){
         if (platformTwilioConnectStatus) platformTwilioConnectStatus.textContent = saved?.warning || "Twilio connected.";
         showSettingsToast(saved?.warning ? "Twilio saved; inventory check pending" : "Twilio connected");
         platformTwilioConnectCard?.classList.add("hidden");
-        await refreshPlatformTwilioInventory();
+        await refreshSuperadminOps();
       } catch (err) {
         if (platformTwilioConnectStatus) platformTwilioConnectStatus.textContent = err?.message || "Twilio connect failed";
         showSettingsToast("Failed to connect Twilio", true);
