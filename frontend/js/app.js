@@ -13637,7 +13637,7 @@ function viewSettings(){
               <thead>
                 <tr style="text-align:left;">
                   <th style="padding:10px; border-bottom:1px solid var(--border);">Business</th>
-                  <th style="padding:10px; border-bottom:1px solid var(--border);">Account ID</th>
+                  <th style="padding:10px; border-bottom:1px solid var(--border);">Account</th>
                   <th style="padding:10px; border-bottom:1px solid var(--border);">To Number</th>
                   <th style="padding:10px; border-bottom:1px solid var(--border);">Created</th>
                 </tr>
@@ -20206,12 +20206,21 @@ function viewSettings(){
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${escapeHtml(account?.businessName || "-")}</td>
-          <td>${escapeHtml(account?.accountId || "-")}</td>
-          <td>${escapeHtml(account?.to || "-")}</td>
+          <td>${escapeHtml(workspaceAccountIdForDisplay(account?.accountId, account?.businessName || "Workspace"))}</td>
+          <td>${escapeHtml(workspaceNumberForDisplay(account?.to, "No live number assigned"))}</td>
           <td>${escapeHtml(formatAdminCreatedAt(account?.createdAt))}</td>
         `;
         adminAccountsTableBody.appendChild(tr);
       }
+    }
+
+    function sanitizeAdminUsersForDisplay(users) {
+      return (Array.isArray(users) ? users : []).map((user) => ({
+        ...user,
+        accountIds: Array.isArray(user?.accountIds)
+          ? user.accountIds.map((accountId) => workspaceAccountIdForDisplay(accountId, "Arc Relay"))
+          : []
+      }));
     }
 
     function applyAdminUserSelect(users) {
@@ -20239,7 +20248,7 @@ function viewSettings(){
           apiGet("/api/auth/me")
         ]);
         renderAdminAccountsTable(accountsRes?.accounts || []);
-        if (adminUsersOut) adminUsersOut.textContent = JSON.stringify(usersRes?.users || [], null, 2);
+        if (adminUsersOut) adminUsersOut.textContent = JSON.stringify(sanitizeAdminUsersForDisplay(usersRes?.users || []), null, 2);
         adminUsersCache = Array.isArray(usersRes?.users) ? usersRes.users : [];
         applyAdminUserSelect(adminUsersCache);
         setSession(meRes || {});
@@ -21571,6 +21580,11 @@ function isLegacyWorkspaceNumberForDisplay(value) {
 function workspaceNumberForDisplay(value, fallback = "--") {
   const raw = String(value || "").trim();
   return raw && !isLegacyWorkspaceNumberForDisplay(raw) ? raw : fallback;
+}
+function workspaceAccountIdForDisplay(value, fallback = "--") {
+  const raw = String(value || "").trim();
+  const digits = raw.replace(/[^\d]/g, "");
+  return raw && !isLegacyWorkspaceNumberForDisplay(digits) ? raw : fallback;
 }
 function escapeHtml(str){
   return String(str ?? "")
