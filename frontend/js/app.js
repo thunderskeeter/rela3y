@@ -252,7 +252,7 @@ function bindNavDelegated() {
 
 
 function getActiveTo(){
-  return localStorage.getItem(UI_KEYS.ACTIVE_TO) || "+18145550001"; // default detailer
+  return localStorage.getItem(UI_KEYS.ACTIVE_TO) || "";
 }
 function setActiveTo(to){
   localStorage.setItem(UI_KEYS.ACTIVE_TO, to);
@@ -656,7 +656,8 @@ function populateAllowedAccountOptions(){
     const name = String(acct?.businessName || '').trim() || "Account";
     const opt = document.createElement("option");
     opt.value = to;
-    opt.textContent = `${name} (To: ${to})`;
+    const displayTo = workspaceNumberForDisplay(to, "");
+    opt.textContent = displayTo ? `${name} (To: ${displayTo})` : name;
     simTo.appendChild(opt);
   });
 
@@ -4325,7 +4326,7 @@ function viewContacts(){
       <div class="auth-card" style="width:min(560px, 92vw);">
         <div class="auth-title" style="margin-bottom:10px;">
           <h1 style="margin:0;">Add contact</h1>
-          <p style="margin:6px 0 0;" class="p">Saved to this account (To: ${escapeHtml(getActiveTo())}).</p>
+          <p style="margin:6px 0 0;" class="p">Saved to this account${workspaceNumberForDisplay(getActiveTo(), "") ? ` (To: ${escapeHtml(workspaceNumberForDisplay(getActiveTo(), ""))})` : ""}.</p>
         </div>
 
         <div class="auth-form" style="gap:12px;">
@@ -17246,7 +17247,7 @@ function viewSettings(){
             billingEls.masterTopBody.innerHTML = rows.map((row) => `
               <tr>
                 <td>${escapeHtml(row.businessName || "Workspace")}</td>
-                <td>${escapeHtml(row.to || "--")}</td>
+                <td>${escapeHtml(workspaceNumberForDisplay(row.to))}</td>
                 <td>${escapeHtml(money(row.paidRevenueCents || 0))}</td>
               </tr>
             `).join("");
@@ -20433,6 +20434,39 @@ function viewSettings(){
       return bl.isLive === true || ["active", "trialing", "paid"].includes(status);
     }
 
+    function isLegacyWorkspaceNumber(value) {
+      return isLegacyWorkspaceNumberForDisplay(value);
+    }
+
+    function workspaceLiveNumbers(account = {}) {
+      const primary = normalizePhone(String(account.to || ""));
+      const numbers = Array.isArray(account.numbers) ? account.numbers : [];
+      const live = numbers
+        .map((n) => String(n || "").trim())
+        .filter(Boolean)
+        .filter((n) => {
+          const normalized = normalizePhone(n);
+          if (isLegacyWorkspaceNumber(n)) return false;
+          return !primary || normalized !== primary || numbers.length === 1;
+        });
+      return [...new Set(live)];
+    }
+
+    function workspaceDisplayNumberText(account = {}) {
+      return workspaceLiveNumbers(account).join(", ") || "No live number assigned";
+    }
+
+    function workspaceDisplayName(account = {}) {
+      return String(account.businessName || "Workspace");
+    }
+
+    function workspaceSelectLabel(account = {}) {
+      const numbers = workspaceLiveNumbers(account);
+      return numbers.length
+        ? `${workspaceDisplayName(account)} (${numbers.join(", ")})`
+        : workspaceDisplayName(account);
+    }
+
     function platformUserRows(users, workspaces) {
       const workspaceList = Array.isArray(workspaces) ? workspaces : [];
       const workspaceById = new Map(workspaceList.map((w) => [String(w?.accountId || ""), w]));
@@ -20500,7 +20534,6 @@ function viewSettings(){
             const user = row.user || {};
             const account = row.account || {};
             const billing = account.billing || {};
-            const numbers = Array.isArray(account.numbers) ? account.numbers : [];
             const status = row.platformScope
               ? "all accounts"
               : String(billing.planStatus || "unpaid").toLowerCase();
@@ -20509,10 +20542,10 @@ function viewSettings(){
               : (row.paid ? "is-paid" : "is-past_due");
             const accountText = row.platformScope
               ? "All accounts"
-              : `${account.businessName || "Unassigned"}${account.accountId ? ` (${account.accountId})` : ""}`;
+              : (account.businessName || "Unassigned");
             const phoneText = row.platformScope
               ? "All assigned numbers"
-              : (numbers.join(", ") || account.to || "Unassigned");
+              : workspaceDisplayNumberText(account);
             const loginText = user.lastLoginAt ? formatSyncTs(user.lastLoginAt) : "Never";
             const disabledText = user.disabled ? `<span class="billing-status-pill is-canceled">Disabled</span>` : "";
             return `
@@ -20584,7 +20617,7 @@ function viewSettings(){
         } else {
           const accountOptions = [
             `<option value="">Unassigned</option>`,
-            ...workspaces.map((ws) => `<option value="${escapeAttr(ws.accountId || "")}">${escapeHtml(ws.businessName || "Workspace")} (${escapeHtml(ws.to || "--")})</option>`)
+            ...workspaces.map((ws) => `<option value="${escapeAttr(ws.accountId || "")}">${escapeHtml(workspaceSelectLabel(ws))}</option>`)
           ].join("");
           platformTwilioNumbersBody.innerHTML = numbers.map((row) => {
             const assigned = Array.isArray(row.assignedWorkspaces) ? row.assignedWorkspaces : [];
@@ -20712,7 +20745,7 @@ function viewSettings(){
           superadminOpsTableBody.innerHTML = `<tr><td colspan="5" class="billing-empty-row">No workspaces found.</td></tr>`;
         } else {
           superadminOpsTableBody.innerHTML = workspaces.map((row) => {
-            const numbers = Array.isArray(row.numbers) ? row.numbers : [];
+            const liveNumberText = workspaceDisplayNumberText(row);
             const assigned = Array.isArray(row.assignedUsers) ? row.assignedUsers : [];
             const tw = row.twilio || {};
             const bl = row.billing || {};
@@ -20725,8 +20758,8 @@ function viewSettings(){
             const billingText = `${bl.planName || "Plan"} (${bl.planStatus || "active"}) | ${formatMoneyFromMonthly(bl.priceMonthly)}/mo`;
             return `
               <tr>
-                <td>${escapeHtml(row.businessName || "Workspace")}<div class="p">${escapeHtml(row.to || "--")}</div></td>
-                <td>${escapeHtml(numbers.join(", ") || "--")}</td>
+                <td>${escapeHtml(workspaceDisplayName(row))}<div class="p">${escapeHtml(liveNumberText)}</div></td>
+                <td>${escapeHtml(liveNumberText)}</td>
                 <td>${escapeHtml(assignedText)}</td>
                 <td>${escapeHtml(twilioText)}</td>
                 <td>${escapeHtml(billingText)}</td>
@@ -20742,7 +20775,7 @@ function viewSettings(){
         for (const row of workspaces) {
           const opt = document.createElement("option");
           opt.value = String(row.accountId || "");
-          opt.textContent = `${row.businessName || "Workspace"} (${row.to || "--"})`;
+          opt.textContent = workspaceSelectLabel(row);
           superadminTwilioAccountSelect.appendChild(opt);
         }
         if (selectedBefore && workspaces.some((w) => String(w.accountId || "") === selectedBefore)) {
@@ -20770,10 +20803,10 @@ function viewSettings(){
             const assigned = Array.isArray(row.assignedWorkspaces) ? row.assignedWorkspaces : [];
             const discovered = Array.isArray(row.discoveredViaWorkspaces) ? row.discoveredViaWorkspaces : [];
             const assignedText = assigned.length
-              ? assigned.map((x) => `${x.businessName} (${x.to || "--"})`).join(", ")
+              ? assigned.map((x) => workspaceDisplayName(x)).join(", ")
               : "Unassigned";
             const discoveredText = discovered.length
-              ? discovered.map((x) => `${x.businessName} (${x.to || "--"})`).join(", ")
+              ? discovered.map((x) => workspaceDisplayName(x)).join(", ")
               : "--";
             return `
               <tr>
@@ -21531,6 +21564,14 @@ async function loadConversation(convoId, options = {}){
 function normalizePhone(phone){
   return (phone || "").replace(/[^\d+]/g, "");
 }
+function isLegacyWorkspaceNumberForDisplay(value) {
+  const normalized = normalizePhone(String(value || "")).replace(/^\+/, "");
+  return normalized === "18145550001" || normalized === "10000000000";
+}
+function workspaceNumberForDisplay(value, fallback = "--") {
+  const raw = String(value || "").trim();
+  return raw && !isLegacyWorkspaceNumberForDisplay(raw) ? raw : fallback;
+}
 function escapeHtml(str){
   return String(str ?? "")
     .replaceAll("&","&amp;")
@@ -21897,7 +21938,8 @@ window.addEventListener("DOMContentLoaded", () => {
   function refreshTopbarTenantPill() {
     if (!topbarTenantPill) return;
     const to = getActiveTo();
-    topbarTenantPill.textContent = `Workspace ${to}`;
+    const displayTo = workspaceNumberForDisplay(to, "");
+    topbarTenantPill.textContent = displayTo ? `Workspace ${displayTo}` : "Workspace";
   }
 
   function setTopbarRecoveryLoading(isLoading) {
